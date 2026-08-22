@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HiSparkles, HiHeart, HiChat, HiCurrencyDollar, HiDownload } from 'react-icons/hi';
+import { HiSparkles, HiHeart, HiChat, HiCurrencyDollar, HiDownload, HiUserAdd } from 'react-icons/hi';
 
 export default function Home({ t, lang, onNavigate, userName, campaigns = [] }) {
   const [affirmationIndex, setAffirmationIndex] = useState(0);
@@ -75,6 +75,14 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [] }) 
         <div className="card-subtitle">{t.supportEachOther}</div>
         <button className="btn btn-primary btn-full" onClick={() => onNavigate('backmi')}>
           <HiHeart /> {t.backMi}
+        </button>
+      </div>
+
+      <div className="card" style={{ background: 'linear-gradient(135deg, rgba(255,105,180,.07), rgba(255,20,147,.025))' }}>
+        <div className="card-title">{lang === 'en' ? 'Join the We-Rise Waitlist' : 'Sluit aan by die We-Rise Waglys'}</div>
+        <div className="card-subtitle">{lang === 'en' ? 'Tell us why you want to be part of the movement and be ready for future member onboarding.' : 'Vertel ons hoekom jy deel van die beweging wil wees en wees gereed vir toekomstige lidregistrasie.'}</div>
+        <button className="btn btn-secondary btn-full" onClick={() => onNavigate('waitlist')}>
+          <HiUserAdd /> {lang === 'en' ? 'Join Waitlist' : 'Sluit aan by Waglys'}
         </button>
       </div>
 

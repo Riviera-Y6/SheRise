@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2
+  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd
 } from 'react-icons/hi';
 import translations from './i18n/translations';
 import { apiRequest } from './lib/api';
@@ -16,6 +16,7 @@ import Safety from './components/Safety';
 import VisionBoard from './components/VisionBoard';
 import Wellness from './components/Wellness';
 import Footer from './components/Footer';
+import Waitlist from './components/Waitlist';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home' },
@@ -27,6 +28,7 @@ const TABS = [
   { id: 'backmi', icon: HiHeart, labelKey: 'backMi' },
   { id: 'community', icon: HiUsers, labelKey: 'community' },
   { id: 'messages', icon: HiChatAlt2, labelKey: 'messages' },
+  { id: 'waitlist', icon: HiUserAdd, labelKey: 'waitlist' },
   { id: 'resell', icon: HiCurrencyDollar, labelKey: 'resell' },
 ];
 
@@ -39,6 +41,13 @@ const normalizeCampaign = (campaign) => ({
   createdAt: campaign.createdAt || campaign.created_at || new Date().toISOString(),
   donations: (campaign.donations || []).map(d => ({ ...d, amount: Number(d.amount || 0) })),
   dailyDonations: (campaign.dailyDonations || campaign.donations || []).map(d => ({ ...d, amount: Number(d.amount || 0) })),
+  reason: campaign.reason || '',
+  category: campaign.category || '',
+  explanation: campaign.explanation || '',
+  country: campaign.country || '',
+  age: campaign.age ? Number(campaign.age) : null,
+  deadline: campaign.deadline || null,
+  status: campaign.status || 'active',
 });
 
 export default function App() {
@@ -201,8 +210,9 @@ export default function App() {
         )}
         {activeTab === 'vision' && <VisionBoard t={t} lang={lang} showToast={showToast} />}
         {activeTab === 'wellness' && <Wellness t={t} lang={lang} showToast={showToast} />}
-        {activeTab === 'safety' && <Safety t={t} lang={lang} showToast={showToast} />}
+        {activeTab === 'safety' && <Safety t={t} lang={lang} showToast={showToast} memberKey={memberKey} userName={userName} />}
         {activeTab === 'journal' && <Journal t={t} lang={lang} showToast={showToast} />}
+        {activeTab === 'waitlist' && <Waitlist lang={lang} userName={userName} showToast={showToast} />}
         {activeTab === 'resell' && <ResellProgram t={t} lang={lang} showToast={showToast} />}
 
         {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen)) && <Footer t={t} />}

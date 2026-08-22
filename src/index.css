@@ -3469,3 +3469,142 @@ textarea.input {
   .messages-bubble-row.is-mine { padding-left: 25px; }
   .messages-bubble-row.is-theirs { padding-right: 25px; }
 }
+
+/* =========================================================
+   What-Now feature integration — BackMi / Safety / Waitlist
+   ========================================================= */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  color: var(--pink);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.eyebrow.danger { color: #ff7a7a; }
+
+.backmi-page { padding-bottom: 10px; }
+.backmi-heading { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+.backmi-heading .section-subtitle { margin-bottom: 0; }
+.backmi-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.backmi-request-card { margin-bottom: 0; padding: 18px; }
+.backmi-card-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.backmi-request-meta { display: flex; gap: 7px; flex-wrap: wrap; }
+.backmi-category, .backmi-days {
+  display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; background: rgba(255,105,180,.08); border: 1px solid var(--border-color); color: var(--pink-light);
+}
+.backmi-days { color: var(--text-secondary); background: rgba(255,255,255,.03); }
+.backmi-title { font-size: 19px; line-height: 1.25; }
+.backmi-request-card .campaign-creator { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; margin-top: 4px; }
+.backmi-request-card .campaign-creator span { display: inline-flex; align-items: center; gap: 2px; }
+.backmi-reason { display: inline-block; margin: 12px 0 6px; color: #ffd4e8; font-size: 12px; font-weight: 700; }
+.backmi-explanation { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.backmi-progress-block { margin-top: 16px; }
+.backmi-progress-labels { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted); margin-bottom: 7px; }
+.backmi-progress-labels strong { color: var(--pink); font-size: 13px; }
+.backmi-progress-track { height: 10px; overflow: hidden; }
+.backmi-money-row { display: flex; justify-content: space-between; gap: 18px; margin: 15px 0 12px; }
+.backmi-money-row > div { display: flex; flex-direction: column; gap: 2px; }
+.backmi-money-row strong { font-size: 19px; color: var(--text-primary); }
+.backmi-money-row span { font-size: 10px; color: var(--text-muted); }
+.backmi-money-row .backmi-remaining { text-align: right; }
+.backmi-money-row .backmi-remaining strong { color: var(--pink); }
+.backmi-stats-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 10px; border-radius: 12px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.04); margin-bottom: 12px; }
+.backmi-stats-strip span { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 9px; color: var(--text-muted); text-align: center; }
+.backmi-stats-strip svg { color: var(--pink); flex-shrink: 0; }
+.backmi-main-action { min-height: 44px; }
+.backmi-donors-toggle { width: 100%; margin-top: 10px; padding: 9px 4px 2px; background: transparent; border: 0; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 11px; }
+.backmi-donors-toggle span { display: flex; align-items: center; gap: 6px; }
+.backmi-donor-list { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--border-color); padding-top: 10px; }
+.backmi-donor-row { display: flex; align-items: center; gap: 9px; padding: 8px; border-radius: 10px; background: rgba(0,0,0,.12); }
+.backmi-donor-row .trusted-contact-avatar { width: 30px; height: 30px; font-size: 12px; }
+.backmi-donor-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.backmi-donor-name strong { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backmi-donor-name span { font-size: 9px; color: var(--text-muted); }
+.backmi-donor-amount { font-size: 12px; color: var(--pink-light); }
+.backmi-no-donors { text-align: center; padding: 12px; color: var(--text-muted); font-size: 11px; }
+.backmi-form-grid, .waitlist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-actions { display: flex; gap: 9px; margin-top: 8px; }
+.modal-actions .btn { flex: 1; }
+.payment-note { color: var(--text-muted); font-size: 9px; line-height: 1.45; margin-top: 10px; text-align: center; }
+
+/* Waitlist */
+.waitlist-page { padding-bottom: 16px; }
+.waitlist-hero { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+.waitlist-icon, .waitlist-success-icon { width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: linear-gradient(135deg, rgba(255,105,180,.22), rgba(255,20,147,.08)); border: 1px solid rgba(255,105,180,.28); color: var(--pink); font-size: 25px; }
+.waitlist-hero h2, .waitlist-success-card h2 { font-size: 24px; margin-bottom: 5px; }
+.waitlist-hero p, .waitlist-success-card p { font-size: 12px; line-height: 1.65; color: var(--text-secondary); }
+.waitlist-count-banner { display: flex; align-items: center; gap: 7px; padding: 11px 13px; border-radius: 12px; background: rgba(255,105,180,.06); border: 1px solid var(--border-color); margin-bottom: 14px; color: var(--text-secondary); font-size: 11px; }
+.waitlist-count-banner svg, .waitlist-count-banner strong { color: var(--pink); }
+.waitlist-form { padding: 18px; }
+.waitlist-textarea { resize: vertical; min-height: 130px; }
+.field-counter { margin-top: 5px; text-align: right; color: var(--text-muted); font-size: 9px; }
+.input-with-icon { position: relative; }
+.input-with-icon > svg { position: absolute; z-index: 1; left: 12px; top: 50%; transform: translateY(-50%); color: var(--pink); }
+.input-with-icon > .input { padding-left: 36px; }
+.waitlist-submit { min-height: 46px; margin-top: 4px; }
+.waitlist-success-card { text-align: center; padding: 34px 20px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius); }
+.waitlist-success-icon { margin: 0 auto 14px; font-size: 30px; }
+.waitlist-count-pill { width: fit-content; margin: 16px auto; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; color: var(--pink-light); border: 1px solid var(--border-color); background: rgba(255,105,180,.06); font-size: 11px; }
+
+/* Emergency / five-contact safety flow */
+.safety-alert-page { padding-bottom: 10px; }
+.emergency-alert-hero { display: flex; align-items: flex-start; gap: 13px; padding: 17px; border-radius: var(--radius); margin-bottom: 13px; background: linear-gradient(135deg, rgba(255,82,82,.12), rgba(255,105,180,.04)); border: 1px solid rgba(255,82,82,.2); }
+.emergency-alert-symbol { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #ff6b6b; background: rgba(255,82,82,.12); border: 1px solid rgba(255,82,82,.26); font-size: 24px; }
+.emergency-alert-hero h2 { font-size: 21px; margin-bottom: 4px; }
+.emergency-alert-hero p { font-size: 11px; line-height: 1.55; color: var(--text-secondary); }
+.emergency-alert-card { padding: 17px; }
+.emergency-location-block > label { display: block; font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 7px; }
+.emergency-location-row { display: flex; gap: 7px; }
+.emergency-location-row .input { flex: 1; min-width: 0; }
+.emergency-location-row .btn { white-space: nowrap; }
+.coordinate-chip { width: fit-content; margin-top: 7px; display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 8px; color: #94d4ff; background: rgba(33,150,243,.08); border: 1px solid rgba(33,150,243,.18); font-size: 9px; }
+.emergency-contact-heading { display: flex; justify-content: space-between; margin: 17px 0 8px; font-size: 11px; color: var(--text-secondary); }
+.emergency-contact-heading strong { color: var(--pink); }
+.emergency-contact-stack { display: flex; flex-direction: column; gap: 7px; margin-bottom: 15px; }
+.emergency-contact-preview { display: flex; align-items: center; gap: 9px; padding: 10px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.05); border-radius: 11px; }
+.emergency-contact-preview > svg { color: var(--text-muted); }
+.emergency-contact-number { width: 29px; height: 29px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,105,180,.1); border: 1px solid rgba(255,105,180,.18); color: var(--pink); font-size: 11px; font-weight: 800; }
+.whatnow-panic { width: 100%; min-height: 58px; margin-top: 5px; }
+.whatnow-panic:disabled { opacity: .45; cursor: not-allowed; animation: none; }
+.safety-disclaimer { display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; padding: 11px !important; font-size: 9px; line-height: 1.5; color: var(--text-muted); background: rgba(255,193,7,.035) !important; border-color: rgba(255,193,7,.12) !important; }
+.safety-disclaimer > svg { color: var(--warning); flex-shrink: 0; font-size: 16px; }
+.alert-result-card { margin-top: 12px; }
+.alert-result-card.configured { border-color: rgba(76,175,80,.25); }
+.alert-result-card.manual { border-color: rgba(255,193,7,.22); }
+.alert-result-title { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 12px; }
+.alert-result-title > svg { flex-shrink: 0; margin-top: 2px; color: var(--warning); font-size: 20px; }
+.alert-result-card.configured .alert-result-title > svg { color: var(--success); }
+.alert-result-title div { display: flex; flex-direction: column; gap: 3px; }
+.alert-result-title strong { font-size: 13px; }
+.alert-result-title span { color: var(--text-secondary); font-size: 10px; line-height: 1.45; }
+.manual-sms-button { margin-top: 7px; text-decoration: none; }
+.contact-capacity, .safety-network-summary { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.contact-capacity { padding: 11px 13px; border-radius: 12px; background: rgba(255,105,180,.05); border: 1px solid var(--border-color); font-size: 11px; }
+.contact-capacity svg { color: var(--pink); }
+.contact-capacity span { flex: 1; }
+.contact-capacity strong { color: var(--pink); }
+.contact-limit-card { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 11px; margin-bottom: 14px; }
+.contact-limit-card svg { color: var(--success); }
+.whatnow-contact-list .trusted-contact-card { padding: 11px; }
+.contact-card-actions { display: flex; gap: 5px; }
+.contact-card-actions .btn { padding: 7px 9px; text-decoration: none; }
+.upgraded-panic-section { margin-bottom: 14px; }
+.safety-network-summary { justify-content: space-between; }
+.safety-network-summary > div { display: flex; flex-direction: column; }
+.safety-network-summary strong { font-size: 13px; }
+.empty-state.compact { padding: 15px 5px; }
+.empty-state.compact svg { font-size: 26px; }
+
+@media (max-width: 380px) {
+  .backmi-form-grid, .waitlist-grid { grid-template-columns: 1fr; gap: 0; }
+  .backmi-stats-strip { grid-template-columns: 1fr; }
+  .backmi-stats-strip span { justify-content: flex-start; }
+  .emergency-location-row { flex-direction: column; }
+  .emergency-location-row .btn { width: 100%; }
+  .waitlist-hero { flex-direction: column; }
+}

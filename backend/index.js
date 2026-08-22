@@ -13,6 +13,11 @@ const MAX_MESSAGE_PAGE_SIZE = 30;
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
+const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
+const TWILIO_FROM_NUMBER = String(process.env.TWILIO_FROM_NUMBER || '').trim();
+const EMERGENCY_SMS_ENABLED = String(process.env.ENABLE_EMERGENCY_SMS || '').trim().toLowerCase() === 'true';
+const SMS_CONFIGURED = Boolean(EMERGENCY_SMS_ENABLED && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Copy backend/.env.example to backend/.env for local development, or set the variables in Render.');
@@ -38,7 +43,7 @@ app.use('/api/*', cors({
     return allowedOrigins.has(normalized) ? origin : '';
   },
   allowHeaders: ['Content-Type', 'Authorization'],
-  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
   maxAge: 86400,
 }));
 
@@ -55,6 +60,37 @@ function cleanMemberKey(value) {
 function cleanName(value, fallback = 'Anonymous We-Rise Lady') {
   const name = String(value || '').trim();
   return name ? name.slice(0, 80) : fallback;
+}
+
+function cleanPhone(value) {
+  return String(value || '').trim().replace(/[^0-9+]/g, '').slice(0, 32);
+}
+
+function buildEmergencyMessage({ name, locationText, latitude, longitude }) {
+  const mapUrl = Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? `https://maps.google.com/?q=${latitude},${longitude}`
+    : '';
+  const location = locationText || mapUrl || 'Location not supplied';
+  return `WE-RISE SAFETY ALERT: ${name || 'A We-Rise member'} needs you to check on her immediately. Location: ${location}${mapUrl && locationText ? ` | Map: ${mapUrl}` : ''}`.slice(0, 1500);
+}
+
+async function sendTwilioSms(to, body) {
+  if (!SMS_CONFIGURED) return { accepted: false, reason: 'not_configured' };
+  const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/Messages.json`;
+  const payload = new URLSearchParams({ To: to, From: TWILIO_FROM_NUMBER, Body: body });
+  const authorization = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${authorization}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: payload,
+  });
+  let data = null;
+  try { data = await response.json(); } catch {}
+  if (!response.ok) return { accepted: false, error: data?.message || `SMS provider returned ${response.status}` };
+  return { accepted: true, provider_id: data?.sid || null, status: data?.status || 'queued' };
 }
 
 function formatDonation(row) {
@@ -106,7 +142,7 @@ app.get('/api/campaigns', async (c) => {
 
 app.post('/api/campaigns', async (c) => {
   try {
-    const { title, description, goal, creator } = await c.req.json();
+    const { title, description, goal, creator, reason, category, explanation, age, country, deadline } = await c.req.json();
     const cleanTitle = String(title || '').trim();
     const numericGoal = Number(goal);
     if (!cleanTitle || !Number.isFinite(numericGoal) || numericGoal <= 0) {
@@ -117,6 +153,12 @@ app.post('/api/campaigns', async (c) => {
       description: String(description || '').trim(),
       goal: numericGoal,
       creator: cleanName(creator),
+      reason: String(reason || '').trim().slice(0, 160) || null,
+      category: String(category || '').trim().slice(0, 80) || 'Community support',
+      explanation: String(explanation || description || '').trim().slice(0, 4000) || null,
+      age: Number.isFinite(Number(age)) && Number(age) >= 18 && Number(age) <= 120 ? Number(age) : null,
+      country: String(country || '').trim().slice(0, 80) || null,
+      deadline: deadline ? String(deadline).slice(0, 10) : null,
     }).select('id').single();
     if (error) throw error;
     return c.json({ id: data.id, success: true }, 201);
@@ -425,6 +467,191 @@ app.post('/api/conversations/:id/read', async (c) => {
     const { error } = await supabase.from('private_messages').update({ read_at: new Date().toISOString() }).eq('conversation_id', conversationId).eq('receiver_key', memberKey).is('read_at', null);
     if (error) throw error;
     return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+
+app.get('/api/waitlist/count', async (c) => {
+  try {
+    const { count, error } = await supabase.from('waitlist_entries').select('id', { count: 'exact', head: true });
+    if (error) throw error;
+    return c.json({ count: Number(count || 0) });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/waitlist', async (c) => {
+  try {
+    const { name, email, age, country, reason, explanation } = await c.req.json();
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const numericAge = Number(age);
+    if (!String(name || '').trim() || !/^\S+@\S+\.\S+$/.test(cleanEmail) || !Number.isFinite(numericAge) || numericAge < 18 || numericAge > 120 || !String(country || '').trim() || !String(reason || '').trim() || !String(explanation || '').trim()) {
+      return c.json({ error: 'All waitlist fields are required and age must be 18 or older.' }, 400);
+    }
+    const { data, error } = await supabase.from('waitlist_entries').insert({
+      name: cleanName(name),
+      email: cleanEmail.slice(0, 320),
+      age: numericAge,
+      country: String(country).trim().slice(0, 80),
+      reason: String(reason).trim().slice(0, 160),
+      explanation: String(explanation).trim().slice(0, 1200),
+    }).select('id').single();
+    if (error) {
+      if (error.code === '23505') return c.json({ error: 'This email address is already on the We-Rise waitlist.' }, 409);
+      throw error;
+    }
+    return c.json({ success: true, id: Number(data.id) }, 201);
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/emergency-contacts', async (c) => {
+  try {
+    const memberKey = cleanMemberKey(c.req.query('member_key'));
+    if (!memberKey) return c.json({ error: 'A valid member key is required.' }, 400);
+    const { data, error } = await supabase.from('emergency_contacts')
+      .select('id, member_key, name, phone, relation, position, created_at')
+      .eq('member_key', memberKey)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return c.json((data || []).map(item => ({ ...item, id: Number(item.id), position: Number(item.position || 0) })));
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/emergency-contacts', async (c) => {
+  try {
+    const { member_key, name, phone, relation, display_name } = await c.req.json();
+    const memberKey = cleanMemberKey(member_key);
+    const cleanContactName = cleanName(name, '');
+    const cleanContactPhone = cleanPhone(phone);
+    if (!memberKey || !cleanContactName || cleanContactPhone.length < 7) return c.json({ error: 'A member, contact name, and valid phone number are required.' }, 400);
+
+    const now = new Date().toISOString();
+    const { error: profileError } = await supabase.from('member_profiles').upsert({
+      member_key: memberKey,
+      display_name: cleanName(display_name, 'We-Rise member'),
+      updated_at: now,
+      last_seen_at: now,
+    }, { onConflict: 'member_key' });
+    if (profileError) throw profileError;
+
+    const { data: currentContacts, error: countError } = await supabase.from('emergency_contacts').select('position').eq('member_key', memberKey);
+    if (countError) throw countError;
+    if ((currentContacts || []).length >= 5) return c.json({ error: 'A We-Rise member can save a maximum of 5 emergency contacts.' }, 400);
+    const occupied = new Set((currentContacts || []).map(item => Number(item.position)));
+    const position = [1, 2, 3, 4, 5].find(slot => !occupied.has(slot));
+    if (!position) return c.json({ error: 'No emergency-contact slot is available.' }, 400);
+
+    const { data, error } = await supabase.from('emergency_contacts').insert({
+      member_key: memberKey,
+      name: cleanContactName,
+      phone: cleanContactPhone,
+      relation: String(relation || '').trim().slice(0, 80) || null,
+      position,
+    }).select('id').single();
+    if (error) throw error;
+    return c.json({ success: true, id: Number(data.id) }, 201);
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.delete('/api/emergency-contacts/:id', async (c) => {
+  try {
+    const contactId = Number(c.req.param('id'));
+    const { member_key } = await c.req.json();
+    const memberKey = cleanMemberKey(member_key);
+    if (!Number.isInteger(contactId) || contactId <= 0 || !memberKey) return c.json({ error: 'Invalid contact request.' }, 400);
+    const { error } = await supabase.from('emergency_contacts').delete().eq('id', contactId).eq('member_key', memberKey);
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/emergency-alerts', async (c) => {
+  try {
+    const { member_key, name, location_text, latitude, longitude } = await c.req.json();
+    const memberKey = cleanMemberKey(member_key);
+    if (!memberKey) return c.json({ error: 'A valid member is required.' }, 400);
+
+    const lat = latitude === null || latitude === undefined || latitude === '' ? null : Number(latitude);
+    const lng = longitude === null || longitude === undefined || longitude === '' ? null : Number(longitude);
+    if ((lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180))) {
+      return c.json({ error: 'Invalid location coordinates.' }, 400);
+    }
+
+    const { data: contacts, error: contactsError } = await supabase.from('emergency_contacts')
+      .select('id, name, phone, relation, position')
+      .eq('member_key', memberKey)
+      .order('position', { ascending: true })
+      .limit(5);
+    if (contactsError) throw contactsError;
+    if (!contacts?.length) return c.json({ error: 'Add at least one emergency contact before sending an alert.' }, 400);
+
+    const messageText = buildEmergencyMessage({
+      name: cleanName(name, 'A We-Rise member'),
+      locationText: String(location_text || '').trim().slice(0, 300),
+      latitude: lat,
+      longitude: lng,
+    });
+
+    const { data: alert, error: alertError } = await supabase.from('emergency_alerts').insert({
+      member_key: memberKey,
+      member_name: cleanName(name, 'We-Rise member'),
+      location_text: String(location_text || '').trim().slice(0, 300) || null,
+      latitude: lat,
+      longitude: lng,
+      message_text: messageText,
+      sms_configured: SMS_CONFIGURED,
+      status: SMS_CONFIGURED ? 'processing' : 'manual_required',
+    }).select('id').single();
+    if (alertError) throw alertError;
+
+    let sentCount = 0;
+    const deliveryResults = [];
+    for (const contact of contacts) {
+      let delivery = { accepted: false, reason: 'not_configured' };
+      if (SMS_CONFIGURED) {
+        try { delivery = await sendTwilioSms(cleanPhone(contact.phone), messageText); }
+        catch (smsError) { delivery = { accepted: false, error: smsError?.message || String(smsError) }; }
+      }
+      if (delivery.accepted) sentCount += 1;
+      deliveryResults.push({ contact_id: Number(contact.id), name: contact.name, accepted: Boolean(delivery.accepted), status: delivery.status || (SMS_CONFIGURED ? 'failed' : 'manual_required') });
+      const { error: recipientError } = await supabase.from('emergency_alert_recipients').insert({
+        alert_id: alert.id,
+        contact_id: contact.id,
+        contact_name: contact.name,
+        phone: cleanPhone(contact.phone),
+        status: delivery.accepted ? (delivery.status || 'queued') : (SMS_CONFIGURED ? 'failed' : 'manual_required'),
+        provider_message_id: delivery.provider_id || null,
+        error_message: delivery.error || null,
+      });
+      if (recipientError) console.error('Could not log emergency recipient', recipientError);
+    }
+
+    await supabase.from('emergency_alerts').update({
+      status: SMS_CONFIGURED ? (sentCount > 0 ? 'submitted' : 'failed') : 'manual_required',
+      sent_count: sentCount,
+    }).eq('id', alert.id);
+
+    return c.json({
+      success: true,
+      alert_id: Number(alert.id),
+      sms_configured: SMS_CONFIGURED,
+      contact_count: contacts.length,
+      sent_count: sentCount,
+      message_text: messageText,
+      deliveries: deliveryResults,
+    }, 201);
   } catch (error) {
     return fail(c, error);
   }
