@@ -29,7 +29,7 @@ export default function Safety({ t, lang, showToast, memberKey, userName }) {
     if (!memberKey) return;
     setContactsLoading(true);
     try {
-      const data = await apiRequest(`/api/emergency-contacts?member_key=${encodeURIComponent(memberKey)}`);
+      const data = await apiRequest('/api/emergency-contacts');
       setTrustedContacts(Array.isArray(data) ? data : []);
     } catch (error) {
       showToast(error?.message || (lang === 'en' ? 'Could not load emergency contacts.' : 'Kon nie noodkontakte laai nie.'));
@@ -68,7 +68,6 @@ export default function Safety({ t, lang, showToast, memberKey, userName }) {
       await apiRequest('/api/emergency-contacts', {
         method: 'POST',
         body: JSON.stringify({
-          member_key: memberKey,
           name: contactForm.name.trim(),
           phone: contactForm.phone.trim(),
           relation: contactForm.relation.trim(),
@@ -88,7 +87,7 @@ export default function Safety({ t, lang, showToast, memberKey, userName }) {
     try {
       await apiRequest(`/api/emergency-contacts/${id}`, {
         method: 'DELETE',
-        body: JSON.stringify({ member_key: memberKey }),
+        body: JSON.stringify({}),
       });
       setTrustedContacts(prev => prev.filter(c => c.id !== id));
       showToast(lang === 'en' ? 'Contact removed.' : 'Kontak verwyder.');
@@ -132,7 +131,6 @@ export default function Safety({ t, lang, showToast, memberKey, userName }) {
       const result = await apiRequest('/api/emergency-alerts', {
         method: 'POST',
         body: JSON.stringify({
-          member_key: memberKey,
           name: userName || 'We-Rise member',
           location_text: locationText.trim(),
           latitude: coordinates?.latitude ?? null,

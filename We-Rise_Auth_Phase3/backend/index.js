@@ -66,6 +66,65 @@ function cleanPhone(value) {
   return String(value || '').trim().replace(/[^0-9+]/g, '').slice(0, 32);
 }
 
+function profileNameFromUser(user) {
+  const metadataName = String(user?.user_metadata?.display_name || user?.user_metadata?.full_name || '').trim();
+  if (metadataName) return cleanName(metadataName, 'We-Rise Lady');
+  const email = String(user?.email || '').trim();
+  return cleanName(email ? email.split('@')[0] : '', 'We-Rise Lady');
+}
+
+async function ensureMemberProfile(user) {
+  if (!user?.id) throw new Error('Authenticated user is missing an id.');
+  const now = new Date().toISOString();
+  const email = String(user.email || '').trim().toLowerCase().slice(0, 320) || null;
+
+  const { data: existing, error: existingError } = await supabase.from('member_profiles')
+    .select('member_key, auth_user_id, email, display_name, plan, created_at, updated_at, last_seen_at')
+    .eq('member_key', user.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    const { data, error } = await supabase.from('member_profiles')
+      .update({ auth_user_id: user.id, email, updated_at: now, last_seen_at: now })
+      .eq('member_key', user.id)
+      .select('member_key, auth_user_id, email, display_name, plan, created_at, updated_at, last_seen_at')
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  const { data, error } = await supabase.from('member_profiles').insert({
+    member_key: user.id,
+    auth_user_id: user.id,
+    email,
+    display_name: profileNameFromUser(user),
+    updated_at: now,
+    last_seen_at: now,
+  }).select('member_key, auth_user_id, email, display_name, plan, created_at, updated_at, last_seen_at').single();
+  if (error) throw error;
+  return data;
+}
+
+function bearerToken(c) {
+  const header = String(c.req.header('authorization') || '').trim();
+  if (!header.toLowerCase().startsWith('bearer ')) return '';
+  return header.slice(7).trim();
+}
+
+async function authContext(c, required = true) {
+  const token = bearerToken(c);
+  if (!token) {
+    return required ? { response: c.json({ error: 'Log in to use this We-Rise feature.', code: 'AUTH_REQUIRED' }, 401) } : null;
+  }
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) {
+    return required ? { response: c.json({ error: 'Your session is no longer valid. Please log in again.', code: 'INVALID_SESSION' }, 401) } : null;
+  }
+  const profile = await ensureMemberProfile(data.user);
+  return { user: data.user, memberKey: data.user.id, profile };
+}
+
 function buildEmergencyMessage({ name, locationText, latitude, longitude }) {
   const mapUrl = Number.isFinite(latitude) && Number.isFinite(longitude)
     ? `https://maps.google.com/?q=${latitude},${longitude}`
@@ -110,6 +169,19 @@ app.get('/api/health', async (c) => {
   return c.json({ status: 'ok', app: 'We-Rise', database: 'supabase' });
 });
 
+app.get('/api/auth/profile', async (c) => {
+  try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    return c.json({
+      user: { id: auth.user.id, email: auth.user.email || null },
+      profile: auth.profile,
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
 app.get('/api/campaigns', async (c) => {
   try {
     const [{ data: campaigns, error: campaignError }, { data: donations, error: donationError }] = await Promise.all([
@@ -142,7 +214,9 @@ app.get('/api/campaigns', async (c) => {
 
 app.post('/api/campaigns', async (c) => {
   try {
-    const { title, description, goal, creator, reason, category, explanation, age, country, deadline } = await c.req.json();
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { title, description, goal, reason, category, explanation, age, country, deadline } = await c.req.json();
     const cleanTitle = String(title || '').trim();
     const numericGoal = Number(goal);
     if (!cleanTitle || !Number.isFinite(numericGoal) || numericGoal <= 0) {
@@ -152,7 +226,8 @@ app.post('/api/campaigns', async (c) => {
       title: cleanTitle.slice(0, 250),
       description: String(description || '').trim(),
       goal: numericGoal,
-      creator: cleanName(creator),
+      creator: auth.profile.display_name,
+      creator_user_id: auth.user.id,
       reason: String(reason || '').trim().slice(0, 160) || null,
       category: String(category || '').trim().slice(0, 80) || 'Community support',
       explanation: String(explanation || description || '').trim().slice(0, 4000) || null,
@@ -192,13 +267,16 @@ app.get('/api/campaigns/:id', async (c) => {
 
 app.post('/api/campaigns/:id/donate', async (c) => {
   try {
-    const { amount, donor } = await c.req.json();
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { amount } = await c.req.json();
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) return c.json({ error: 'A positive donation amount is required.' }, 400);
     const { data, error } = await supabase.rpc('record_donation', {
       p_campaign_id: c.req.param('id'),
-      p_donor: cleanName(donor, 'Anonymous'),
+      p_donor: auth.profile.display_name,
       p_amount: numericAmount,
+      p_donor_user_id: auth.user.id,
     });
     if (error) throw error;
     if (!data) return c.json({ error: 'Campaign not found.' }, 404);
@@ -210,7 +288,8 @@ app.post('/api/campaigns/:id/donate', async (c) => {
 
 app.get('/api/topics', async (c) => {
   try {
-    const supporterKey = String(c.req.query('supporter_key') || '').trim();
+    const auth = await authContext(c, false);
+    const supporterKey = auth?.memberKey || '';
     const { data, error } = await supabase.rpc('get_community_topics', { p_supporter_key: supporterKey });
     if (error) throw error;
     return c.json((data || []).map(topic => ({
@@ -227,11 +306,17 @@ app.get('/api/topics', async (c) => {
 
 app.post('/api/topics', async (c) => {
   try {
-    const { title, author } = await c.req.json();
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { title } = await c.req.json();
     const cleanTitle = String(title || '').trim();
     if (!cleanTitle) return c.json({ error: 'A community message is required.' }, 400);
     if (cleanTitle.length > MAX_COMMUNITY_CHARS) return c.json({ error: `Community messages are limited to ${MAX_COMMUNITY_CHARS} characters.` }, 400);
-    const { data, error } = await supabase.from('community_topics').insert({ title: cleanTitle, author: cleanName(author) }).select('id').single();
+    const { data, error } = await supabase.from('community_topics').insert({
+      title: cleanTitle,
+      author: auth.profile.display_name,
+      author_user_id: auth.user.id,
+    }).select('id').single();
     if (error) throw error;
     return c.json({ id: Number(data.id), success: true }, 201);
   } catch (error) {
@@ -256,16 +341,23 @@ app.get('/api/topics/:id/comments', async (c) => {
 
 app.post('/api/topics/:id/comments', async (c) => {
   try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
     const topicId = Number(c.req.param('id'));
     if (!Number.isInteger(topicId) || topicId <= 0) return c.json({ error: 'Invalid topic.' }, 400);
-    const { content, author } = await c.req.json();
+    const { content } = await c.req.json();
     const cleanContent = String(content || '').trim();
     if (!cleanContent) return c.json({ error: 'A comment is required.' }, 400);
     if (cleanContent.length > MAX_COMMUNITY_CHARS) return c.json({ error: `Comments are limited to ${MAX_COMMUNITY_CHARS} characters.` }, 400);
     const { data: topic, error: topicError } = await supabase.from('community_topics').select('id').eq('id', topicId).maybeSingle();
     if (topicError) throw topicError;
     if (!topic) return c.json({ error: 'Conversation not found.' }, 404);
-    const { data, error } = await supabase.from('community_comments').insert({ topic_id: topicId, author: cleanName(author), content: cleanContent }).select('id').single();
+    const { data, error } = await supabase.from('community_comments').insert({
+      topic_id: topicId,
+      author: auth.profile.display_name,
+      author_user_id: auth.user.id,
+      content: cleanContent,
+    }).select('id').single();
     if (error) throw error;
     return c.json({ id: Number(data.id), success: true }, 201);
   } catch (error) {
@@ -275,12 +367,11 @@ app.post('/api/topics/:id/comments', async (c) => {
 
 app.post('/api/topics/:id/support', async (c) => {
   try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
     const topicId = Number(c.req.param('id'));
     if (!Number.isInteger(topicId) || topicId <= 0) return c.json({ error: 'Invalid topic.' }, 400);
-    const { supporter_key } = await c.req.json();
-    const supporterKey = String(supporter_key || '').trim();
-    if (!supporterKey || supporterKey.length > 120) return c.json({ error: 'A valid supporter key is required.' }, 400);
-    const { data, error } = await supabase.rpc('toggle_community_support', { p_topic_id: topicId, p_supporter_key: supporterKey });
+    const { data, error } = await supabase.rpc('toggle_community_support', { p_topic_id: topicId, p_supporter_key: auth.memberKey });
     if (error) throw error;
     if (!data || !data.length) return c.json({ error: 'Conversation not found.' }, 404);
     return c.json({ supported: Boolean(data[0].supported), supports: Number(data[0].supports || 0) });
@@ -291,19 +382,18 @@ app.post('/api/topics/:id/support', async (c) => {
 
 app.post('/api/members/upsert', async (c) => {
   try {
-    const { member_key, display_name } = await c.req.json();
-    const memberKey = cleanMemberKey(member_key);
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { display_name } = await c.req.json();
     const displayName = String(display_name || '').trim();
-    if (!memberKey) return c.json({ error: 'A valid member key is required.' }, 400);
     if (!displayName || displayName.length > 80) return c.json({ error: 'A member name between 1 and 80 characters is required.' }, 400);
 
     const now = new Date().toISOString();
-    const { data, error } = await supabase.from('member_profiles').upsert({
-      member_key: memberKey,
+    const { data, error } = await supabase.from('member_profiles').update({
       display_name: displayName,
       updated_at: now,
       last_seen_at: now,
-    }, { onConflict: 'member_key' }).select('member_key, display_name, plan, created_at, updated_at, last_seen_at').single();
+    }).eq('member_key', auth.memberKey).select('member_key, auth_user_id, email, display_name, plan, created_at, updated_at, last_seen_at').single();
     if (error) throw error;
     return c.json(data);
   } catch (error) {
@@ -313,9 +403,14 @@ app.post('/api/members/upsert', async (c) => {
 
 app.get('/api/members', async (c) => {
   try {
-    const memberKey = cleanMemberKey(c.req.query('member_key'));
-    if (!memberKey) return c.json({ error: 'A valid member key is required.' }, 400);
-    const { data, error } = await supabase.from('member_profiles').select('member_key, display_name, plan, last_seen_at').neq('member_key', memberKey).order('display_name', { ascending: true }).limit(100);
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { data, error } = await supabase.from('member_profiles')
+      .select('member_key, display_name, plan, last_seen_at')
+      .neq('member_key', auth.memberKey)
+      .not('auth_user_id', 'is', null)
+      .order('display_name', { ascending: true })
+      .limit(100);
     if (error) throw error;
     return c.json(data || []);
   } catch (error) {
@@ -325,15 +420,17 @@ app.get('/api/members', async (c) => {
 
 app.post('/api/conversations', async (c) => {
   try {
-    const { member_key, other_member_key } = await c.req.json();
-    const memberKey = cleanMemberKey(member_key);
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { other_member_key } = await c.req.json();
+    const memberKey = auth.memberKey;
     const otherKey = cleanMemberKey(other_member_key);
-    if (!memberKey || !otherKey) return c.json({ error: 'Two valid members are required.' }, 400);
+    if (!otherKey) return c.json({ error: 'A valid We-Rise member is required.' }, 400);
     if (memberKey === otherKey) return c.json({ error: 'You cannot start a conversation with yourself.' }, 400);
 
-    const { data: members, error: memberError } = await supabase.from('member_profiles').select('member_key').in('member_key', [memberKey, otherKey]);
+    const { data: otherMember, error: memberError } = await supabase.from('member_profiles').select('member_key, auth_user_id').eq('member_key', otherKey).not('auth_user_id', 'is', null).maybeSingle();
     if (memberError) throw memberError;
-    if ((members || []).length !== 2) return c.json({ error: 'One of these We-Rise Ladies is not available.' }, 404);
+    if (!otherMember) return c.json({ error: 'This We-Rise Lady is not available.' }, 404);
 
     const [memberA, memberB] = [memberKey, otherKey].sort();
     const { data: existing, error: existingError } = await supabase.from('private_conversations').select('id, member_a_key, member_b_key, created_at, last_message_at').eq('member_a_key', memberA).eq('member_b_key', memberB).maybeSingle();
@@ -357,9 +454,9 @@ app.post('/api/conversations', async (c) => {
 
 app.get('/api/inbox', async (c) => {
   try {
-    const memberKey = cleanMemberKey(c.req.query('member_key'));
-    if (!memberKey) return c.json({ error: 'A valid member key is required.' }, 400);
-    const { data, error } = await supabase.rpc('get_member_inbox', { p_member_key: memberKey });
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { data, error } = await supabase.rpc('get_member_inbox', { p_member_key: auth.memberKey });
     if (error) throw error;
     return c.json((data || []).map(item => ({ ...item, id: Number(item.id), unread_count: Number(item.unread_count || 0) })));
   } catch (error) {
@@ -369,13 +466,15 @@ app.get('/api/inbox', async (c) => {
 
 app.get('/api/conversations/:id/messages', async (c) => {
   try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
     const conversationId = Number(c.req.param('id'));
-    const memberKey = cleanMemberKey(c.req.query('member_key'));
+    const memberKey = auth.memberKey;
     const requestedLimit = Number(c.req.query('limit') || 20);
     const limit = Math.max(1, Math.min(MAX_MESSAGE_PAGE_SIZE, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 20));
     const beforeIdRaw = c.req.query('before_id');
     const beforeId = beforeIdRaw ? Number(beforeIdRaw) : null;
-    if (!Number.isInteger(conversationId) || conversationId <= 0 || !memberKey) return c.json({ error: 'Invalid conversation request.' }, 400);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) return c.json({ error: 'Invalid conversation request.' }, 400);
 
     const { data: conversation, error: conversationError } = await supabase.from('private_conversations').select('id, member_a_key, member_b_key').eq('id', conversationId).maybeSingle();
     if (conversationError) throw conversationError;
@@ -405,11 +504,13 @@ app.get('/api/conversations/:id/messages', async (c) => {
 
 app.post('/api/conversations/:id/messages', async (c) => {
   try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
     const conversationId = Number(c.req.param('id'));
-    const { member_key, content } = await c.req.json();
-    const memberKey = cleanMemberKey(member_key);
+    const { content } = await c.req.json();
+    const memberKey = auth.memberKey;
     const cleanContent = String(content || '').trim();
-    if (!Number.isInteger(conversationId) || conversationId <= 0 || !memberKey) return c.json({ error: 'Invalid conversation request.' }, 400);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) return c.json({ error: 'Invalid conversation request.' }, 400);
     if (!cleanContent) return c.json({ error: 'A message is required.' }, 400);
 
     const { data: conversation, error: conversationError } = await supabase.from('private_conversations').select('id, member_a_key, member_b_key').eq('id', conversationId).maybeSingle();
@@ -417,13 +518,10 @@ app.post('/api/conversations/:id/messages', async (c) => {
     if (!conversation) return c.json({ error: 'Conversation not found.' }, 404);
     if (conversation.member_a_key !== memberKey && conversation.member_b_key !== memberKey) return c.json({ error: 'You do not have access to this conversation.' }, 403);
 
-    const { data: profile, error: profileError } = await supabase.from('member_profiles').select('plan').eq('member_key', memberKey).maybeSingle();
-    if (profileError) throw profileError;
-    if (!profile) return c.json({ error: 'Member profile not found.' }, 404);
-    const messageLimit = profile.plan === 'premium' ? PREMIUM_PRIVATE_MESSAGE_CHARS : FREE_PRIVATE_MESSAGE_CHARS;
+    const messageLimit = auth.profile.plan === 'premium' ? PREMIUM_PRIVATE_MESSAGE_CHARS : FREE_PRIVATE_MESSAGE_CHARS;
     if (cleanContent.length > messageLimit) {
       return c.json({
-        error: profile.plan === 'premium'
+        error: auth.profile.plan === 'premium'
           ? `Premium messages are limited to ${PREMIUM_PRIVATE_MESSAGE_CHARS} characters.`
           : `Free messages are limited to ${FREE_PRIVATE_MESSAGE_CHARS} characters. Upgrade to We-Rise Premium for up to ${PREMIUM_PRIVATE_MESSAGE_CHARS} characters.`,
         code: 'MESSAGE_LIMIT',
@@ -454,10 +552,11 @@ app.post('/api/conversations/:id/messages', async (c) => {
 
 app.post('/api/conversations/:id/read', async (c) => {
   try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
     const conversationId = Number(c.req.param('id'));
-    const { member_key } = await c.req.json();
-    const memberKey = cleanMemberKey(member_key);
-    if (!Number.isInteger(conversationId) || conversationId <= 0 || !memberKey) return c.json({ error: 'Invalid conversation request.' }, 400);
+    const memberKey = auth.memberKey;
+    if (!Number.isInteger(conversationId) || conversationId <= 0) return c.json({ error: 'Invalid conversation request.' }, 400);
 
     const { data: conversation, error: conversationError } = await supabase.from('private_conversations').select('member_a_key, member_b_key').eq('id', conversationId).maybeSingle();
     if (conversationError) throw conversationError;
@@ -471,7 +570,6 @@ app.post('/api/conversations/:id/read', async (c) => {
     return fail(c, error);
   }
 });
-
 
 app.get('/api/waitlist/count', async (c) => {
   try {
@@ -511,11 +609,11 @@ app.post('/api/waitlist', async (c) => {
 
 app.get('/api/emergency-contacts', async (c) => {
   try {
-    const memberKey = cleanMemberKey(c.req.query('member_key'));
-    if (!memberKey) return c.json({ error: 'A valid member key is required.' }, 400);
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
     const { data, error } = await supabase.from('emergency_contacts')
       .select('id, member_key, name, phone, relation, position, created_at')
-      .eq('member_key', memberKey)
+      .eq('member_key', auth.memberKey)
       .order('position', { ascending: true })
       .order('created_at', { ascending: true });
     if (error) throw error;
@@ -527,22 +625,14 @@ app.get('/api/emergency-contacts', async (c) => {
 
 app.post('/api/emergency-contacts', async (c) => {
   try {
-    const { member_key, name, phone, relation, display_name } = await c.req.json();
-    const memberKey = cleanMemberKey(member_key);
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { name, phone, relation } = await c.req.json();
     const cleanContactName = cleanName(name, '');
     const cleanContactPhone = cleanPhone(phone);
-    if (!memberKey || !cleanContactName || cleanContactPhone.length < 7) return c.json({ error: 'A member, contact name, and valid phone number are required.' }, 400);
+    if (!cleanContactName || cleanContactPhone.length < 7) return c.json({ error: 'A contact name and valid phone number are required.' }, 400);
 
-    const now = new Date().toISOString();
-    const { error: profileError } = await supabase.from('member_profiles').upsert({
-      member_key: memberKey,
-      display_name: cleanName(display_name, 'We-Rise member'),
-      updated_at: now,
-      last_seen_at: now,
-    }, { onConflict: 'member_key' });
-    if (profileError) throw profileError;
-
-    const { data: currentContacts, error: countError } = await supabase.from('emergency_contacts').select('position').eq('member_key', memberKey);
+    const { data: currentContacts, error: countError } = await supabase.from('emergency_contacts').select('position').eq('member_key', auth.memberKey);
     if (countError) throw countError;
     if ((currentContacts || []).length >= 5) return c.json({ error: 'A We-Rise member can save a maximum of 5 emergency contacts.' }, 400);
     const occupied = new Set((currentContacts || []).map(item => Number(item.position)));
@@ -550,7 +640,7 @@ app.post('/api/emergency-contacts', async (c) => {
     if (!position) return c.json({ error: 'No emergency-contact slot is available.' }, 400);
 
     const { data, error } = await supabase.from('emergency_contacts').insert({
-      member_key: memberKey,
+      member_key: auth.memberKey,
       name: cleanContactName,
       phone: cleanContactPhone,
       relation: String(relation || '').trim().slice(0, 80) || null,
@@ -565,11 +655,11 @@ app.post('/api/emergency-contacts', async (c) => {
 
 app.delete('/api/emergency-contacts/:id', async (c) => {
   try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
     const contactId = Number(c.req.param('id'));
-    const { member_key } = await c.req.json();
-    const memberKey = cleanMemberKey(member_key);
-    if (!Number.isInteger(contactId) || contactId <= 0 || !memberKey) return c.json({ error: 'Invalid contact request.' }, 400);
-    const { error } = await supabase.from('emergency_contacts').delete().eq('id', contactId).eq('member_key', memberKey);
+    if (!Number.isInteger(contactId) || contactId <= 0) return c.json({ error: 'Invalid contact request.' }, 400);
+    const { error } = await supabase.from('emergency_contacts').delete().eq('id', contactId).eq('member_key', auth.memberKey);
     if (error) throw error;
     return c.json({ success: true });
   } catch (error) {
@@ -579,9 +669,10 @@ app.delete('/api/emergency-contacts/:id', async (c) => {
 
 app.post('/api/emergency-alerts', async (c) => {
   try {
-    const { member_key, name, location_text, latitude, longitude } = await c.req.json();
-    const memberKey = cleanMemberKey(member_key);
-    if (!memberKey) return c.json({ error: 'A valid member is required.' }, 400);
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { location_text, latitude, longitude } = await c.req.json();
+    const memberKey = auth.memberKey;
 
     const lat = latitude === null || latitude === undefined || latitude === '' ? null : Number(latitude);
     const lng = longitude === null || longitude === undefined || longitude === '' ? null : Number(longitude);
@@ -598,7 +689,7 @@ app.post('/api/emergency-alerts', async (c) => {
     if (!contacts?.length) return c.json({ error: 'Add at least one emergency contact before sending an alert.' }, 400);
 
     const messageText = buildEmergencyMessage({
-      name: cleanName(name, 'A We-Rise member'),
+      name: auth.profile.display_name,
       locationText: String(location_text || '').trim().slice(0, 300),
       latitude: lat,
       longitude: lng,
@@ -606,7 +697,7 @@ app.post('/api/emergency-alerts', async (c) => {
 
     const { data: alert, error: alertError } = await supabase.from('emergency_alerts').insert({
       member_key: memberKey,
-      member_name: cleanName(name, 'We-Rise member'),
+      member_name: auth.profile.display_name,
       location_text: String(location_text || '').trim().slice(0, 300) || null,
       latitude: lat,
       longitude: lng,
@@ -659,10 +750,13 @@ app.post('/api/emergency-alerts', async (c) => {
 
 app.post('/api/referrals', async (c) => {
   try {
-    const { referrer, referred_email } = await c.req.json();
-    const cleanReferrer = String(referrer || '').trim();
-    if (!cleanReferrer) return c.json({ error: 'Referrer is required.' }, 400);
-    const { error } = await supabase.from('referrals').insert({ referrer: cleanReferrer.slice(0, 120), referred_email: String(referred_email || '').trim().slice(0, 320) || null });
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { referred_email } = await c.req.json();
+    const { error } = await supabase.from('referrals').insert({
+      referrer: auth.memberKey,
+      referred_email: String(referred_email || '').trim().slice(0, 320) || null,
+    });
     if (error) throw error;
     return c.json({ success: true }, 201);
   } catch (error) {

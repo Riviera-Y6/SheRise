@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HiSparkles, HiHeart, HiChat, HiCurrencyDollar, HiDownload, HiUserAdd } from 'react-icons/hi';
 
-export default function Home({ t, lang, onNavigate, userName, campaigns = [] }) {
+export default function Home({ t, lang, onNavigate, userName, campaigns = [], isAuthenticated = false, onLogin, onRegister }) {
   const [affirmationIndex, setAffirmationIndex] = useState(0);
 
   const affirmations = [
@@ -32,11 +32,25 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [] }) 
   return (
     <div className="fade-in">
       <div className="welcome-hero">
-        <h2>{userName ? t.welcomeBackName.replace('{name}', userName) : t.welcomeBack}</h2>
-        <p>{t.joinMovement}</p>
+        <h2>{isAuthenticated && userName ? t.welcomeBackName.replace('{name}', userName) : (lang === 'en' ? 'Welcome to We-Rise' : 'Welkom by We-Rise')}</h2>
+        <p>{isAuthenticated ? t.joinMovement : (lang === 'en' ? 'Explore the movement freely. Create an account when you are ready to use your personal features.' : 'Verken die beweging vrylik. Skep ’n rekening wanneer jy gereed is om jou persoonlike funksies te gebruik.')}</p>
       </div>
 
       <div className="tagline">{t.tagline}</div>
+
+      {!isAuthenticated && (
+        <div className="guest-home-card">
+          <div className="guest-home-badge">{lang === 'en' ? 'PUBLIC WEBSITE' : 'PUBLIEKE WEBWERF'}</div>
+          <h3>{lang === 'en' ? 'Browse first. Join when you are ready.' : 'Kyk eers rond. Sluit aan wanneer jy gereed is.'}</h3>
+          <p>{lang === 'en'
+            ? 'You do not need an account to open We-Rise. Login is only required when you want to use personal, community or safety features.'
+            : 'Jy het nie ’n rekening nodig om We-Rise oop te maak nie. Aanmelding is net nodig wanneer jy persoonlike, gemeenskap- of veiligheidsfunksies wil gebruik.'}</p>
+          <div className="guest-home-actions">
+            <button className="btn btn-primary" onClick={onRegister}>{lang === 'en' ? 'Create account' : 'Skep rekening'}</button>
+            <button className="btn btn-secondary" onClick={onLogin}>{lang === 'en' ? 'Log in' : 'Meld aan'}</button>
+          </div>
+        </div>
+      )}
 
       <div className="stats-row">
         <div className="stat-box">

@@ -45,7 +45,7 @@ function CommunityAvatar({ name, small = false }) {
   );
 }
 
-export default function Community({ t, lang, showToast, userName, memberKey, onConversationChange }) {
+export default function Community({ t, lang, showToast, userName, memberKey, isAuthenticated = false, onRequireAuth, onConversationChange }) {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -68,7 +68,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
     setLoading(true);
     setLoadError(false);
     try {
-      const data = await apiRequest(`/api/topics?supporter_key=${encodeURIComponent(memberKey)}`);
+      const data = await apiRequest('/api/topics');
       setTopics(Array.isArray(data) ? data : []);
     } catch {
       setTopics([]);
@@ -76,7 +76,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
     } finally {
       setLoading(false);
     }
-  }, [memberKey]);
+  }, []);
 
   const loadComments = useCallback(async (topicId) => {
     if (!topicId) return;
@@ -104,13 +104,14 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
   }, [selectedTopicId, loadComments]);
 
   const handleCreatePost = async () => {
+    if (!isAuthenticated) { onRequireAuth?.(); return; }
     const content = postText.trim();
     if (!content || content.length > MAX_COMMUNITY_CHARS || posting) return;
     setPosting(true);
     try {
       const created = await apiRequest('/api/topics', {
         method: 'POST',
-        body: JSON.stringify({ title: content, author: authorName }),
+        body: JSON.stringify({ title: content }),
       });
       setPostText('');
       await loadTopics();
@@ -124,13 +125,14 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
   };
 
   const handleCreateComment = async () => {
+    if (!isAuthenticated) { onRequireAuth?.(); return; }
     const content = commentText.trim();
     if (!selectedTopicId || !content || content.length > MAX_COMMUNITY_CHARS || commentPosting) return;
     setCommentPosting(true);
     try {
       await apiRequest(`/api/topics/${selectedTopicId}/comments`, {
         method: 'POST',
-        body: JSON.stringify({ content, author: authorName }),
+        body: JSON.stringify({ content }),
       });
       setCommentText('');
       await Promise.all([loadComments(selectedTopicId), loadTopics()]);
@@ -143,12 +145,13 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
   };
 
   const toggleSupport = async (topicId) => {
+    if (!isAuthenticated) { onRequireAuth?.(); return; }
     if (supportBusy) return;
     setSupportBusy(topicId);
     try {
       const result = await apiRequest(`/api/topics/${topicId}/support`, {
         method: 'POST',
-        body: JSON.stringify({ supporter_key: memberKey }),
+        body: JSON.stringify({}),
       });
       setTopics(current => current.map(topic => String(topic.id) === String(topicId)
         ? { ...topic, supports: Number(result.supports || 0), supported: Boolean(result.supported) }
@@ -277,15 +280,19 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
               value={commentText}
               maxLength={MAX_COMMUNITY_CHARS}
               rows={2}
+              readOnly={!isAuthenticated}
+              onFocus={() => { if (!isAuthenticated) onRequireAuth?.(); }}
               onChange={event => setCommentText(event.target.value)}
               onKeyDown={event => handleComposerKeyDown(event, handleCreateComment)}
-              placeholder={lang === 'en' ? 'Write a kind, helpful comment…' : 'Skryf ’n vriendelike, nuttige kommentaar…'}
+              placeholder={isAuthenticated
+                ? (lang === 'en' ? 'Write a kind, helpful comment…' : 'Skryf ’n vriendelike, nuttige kommentaar…')
+                : (lang === 'en' ? 'Log in to join this conversation' : 'Meld aan om by hierdie gesprek aan te sluit')}
             />
             <button
               type="button"
               className="community-send-button"
               onClick={handleCreateComment}
-              disabled={!commentText.trim() || commentPosting}
+              disabled={isAuthenticated ? (!commentText.trim() || commentPosting) : false}
               aria-label={lang === 'en' ? 'Send comment' : 'Stuur kommentaar'}
             >
               <HiPaperAirplane />
@@ -338,9 +345,13 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
           value={postText}
           maxLength={MAX_COMMUNITY_CHARS}
           rows={4}
+          readOnly={!isAuthenticated}
+          onFocus={() => { if (!isAuthenticated) onRequireAuth?.(); }}
           onChange={event => setPostText(event.target.value)}
           onKeyDown={event => handleComposerKeyDown(event, handleCreatePost)}
-          placeholder={lang === 'en' ? 'What would you like to share or ask today?' : 'Wat wil jy vandag deel of vra?'}
+          placeholder={isAuthenticated
+            ? (lang === 'en' ? 'What would you like to share or ask today?' : 'Wat wil jy vandag deel of vra?')
+            : (lang === 'en' ? 'Log in to share with the We-Rise community' : 'Meld aan om met die We-Rise gemeenskap te deel')}
         />
         <div className="community-composer-footer">
           <div>
@@ -353,10 +364,10 @@ export default function Community({ t, lang, showToast, userName, memberKey, onC
             type="button"
             className="community-post-button"
             onClick={handleCreatePost}
-            disabled={!postText.trim() || posting}
+            disabled={isAuthenticated ? (!postText.trim() || posting) : false}
           >
             <HiPaperAirplane />
-            {posting ? (lang === 'en' ? 'Posting…' : 'Plaas…') : (lang === 'en' ? 'Post' : 'Plaas')}
+            {!isAuthenticated ? (lang === 'en' ? 'Log in to post' : 'Meld aan om te plaas') : posting ? (lang === 'en' ? 'Posting…' : 'Plaas…') : (lang === 'en' ? 'Post' : 'Plaas')}
           </button>
         </div>
       </section>

@@ -16,13 +16,12 @@ const initialForm = {
   deadline: '',
 };
 
-export default function BackMi({ t, lang, campaigns, campaignsLoading, campaignsError, onRetryCampaigns, onAddCampaign, onDonate, showToast }) {
+export default function BackMi({ t, lang, campaigns, campaignsLoading, campaignsError, onRetryCampaigns, onAddCampaign, onDonate, showToast, isAuthenticated = false, onRequireAuth }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showDonate, setShowDonate] = useState(null);
   const [showBackers, setShowBackers] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [donationAmount, setDonationAmount] = useState('');
-  const [donorName, setDonorName] = useState('');
 
   const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -48,10 +47,9 @@ export default function BackMi({ t, lang, campaigns, campaignsLoading, campaigns
   const handleDonateSubmit = async (campaignId) => {
     const amount = parseFloat(donationAmount);
     if (!amount || amount <= 0) return;
-    const saved = await onDonate(campaignId, amount, donorName.trim() || undefined);
+    const saved = await onDonate(campaignId, amount);
     if (!saved) return;
     setDonationAmount('');
-    setDonorName('');
     setShowDonate(null);
   };
 
@@ -84,7 +82,7 @@ export default function BackMi({ t, lang, campaigns, campaignsLoading, campaigns
             ? 'Members helping members. Follow every request, see exactly what is still needed, and back a We-Rise Lady when she needs support.'
             : 'Lede help lede. Volg elke versoek, sien presies wat nog benodig word, en ondersteun ’n We-Rise Lady wanneer sy hulp nodig het.'}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+        <button className="btn btn-primary" onClick={() => { if (!isAuthenticated) { onRequireAuth?.(); return; } setShowCreate(true); }}>
           <HiPlus /> {lang === 'en' ? 'Create BackMi Request' : 'Skep BackMi-versoek'}
         </button>
       </div>
@@ -159,7 +157,7 @@ export default function BackMi({ t, lang, campaigns, campaignsLoading, campaigns
                 </div>
 
                 {!isFunded && (
-                  <button className="btn btn-primary btn-full backmi-main-action" onClick={() => setShowDonate(campaign.id)}>
+                  <button className="btn btn-primary btn-full backmi-main-action" onClick={() => { if (!isAuthenticated) { onRequireAuth?.(); return; } setShowDonate(campaign.id); }}>
                     <HiHeart /> {lang === 'en' ? 'Back This Request' : 'Ondersteun Hierdie Versoek'}
                   </button>
                 )}
@@ -225,7 +223,7 @@ export default function BackMi({ t, lang, campaigns, campaignsLoading, campaigns
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="eyebrow">BACKMI</div>
             <h3 className="modal-title">{t.becomeBacker}</h3>
-            <div className="form-group"><label>{lang === 'en' ? 'Your Name (optional)' : 'Jou Naam (opsioneel)'}</label><input className="input" value={donorName} onChange={e => setDonorName(e.target.value)} placeholder={lang === 'en' ? 'Anonymous We-Rise Lady' : 'Anonieme We-Rise Lady'} /></div>
+            <div className="authenticated-action-note">{lang === 'en' ? 'This pledge will be recorded under your authenticated We-Rise member profile.' : 'Hierdie belofte sal onder jou geverifieerde We-Rise lidprofiel aangeteken word.'}</div>
             <div className="form-group"><label>{t.donationAmount} (R)</label><input className="input" type="number" min="1" value={donationAmount} onChange={e => setDonationAmount(e.target.value)} placeholder="100" /></div>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => setShowDonate(null)}>{t.cancel}</button>

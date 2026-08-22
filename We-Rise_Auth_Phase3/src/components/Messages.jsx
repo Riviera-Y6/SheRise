@@ -152,7 +152,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
     setLoading(true);
     setError(false);
     try {
-      const data = await apiRequest(`/api/inbox?member_key=${encodeURIComponent(memberKey)}`);
+      const data = await apiRequest('/api/inbox');
       setInbox(Array.isArray(data) ? data : []);
     } catch {
       setInbox([]);
@@ -165,7 +165,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
   const loadMembers = useCallback(async () => {
     if (!memberKey) return;
     try {
-      const data = await apiRequest(`/api/members?member_key=${encodeURIComponent(memberKey)}`);
+      const data = await apiRequest('/api/members');
       setMembers(Array.isArray(data) ? data : []);
     } catch {
       setMembers([]);
@@ -187,7 +187,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
     try {
       await apiRequest(`/api/conversations/${conversationId}/read`, {
         method: 'POST',
-        body: JSON.stringify({ member_key: memberKey }),
+        body: JSON.stringify({}),
       });
     } catch {}
   }, [memberKey]);
@@ -196,7 +196,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
     if (!conversationId || !memberKey) return;
     if (!quiet) prepend ? setLoadingEarlier(true) : setMessagesLoading(true);
     try {
-      const params = new URLSearchParams({ member_key: memberKey, limit: String(PAGE_SIZE) });
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
       if (beforeId) params.set('before_id', String(beforeId));
       const data = await apiRequest(`/api/conversations/${conversationId}/messages?${params.toString()}`);
       const incoming = Array.isArray(data?.messages) ? data.messages : [];
@@ -244,15 +244,9 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
     if (!member?.member_key || startingWith) return;
     setStartingWith(member.member_key);
     try {
-      if (userName?.trim()) {
-        await apiRequest('/api/members/upsert', {
-          method: 'POST',
-          body: JSON.stringify({ member_key: memberKey, display_name: userName.trim() }),
-        });
-      }
       const conversation = await apiRequest('/api/conversations', {
         method: 'POST',
-        body: JSON.stringify({ member_key: memberKey, other_member_key: member.member_key }),
+        body: JSON.stringify({ other_member_key: member.member_key }),
       });
       await openConversation({
         ...conversation,
@@ -273,7 +267,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
     try {
       const created = await apiRequest(`/api/conversations/${selectedConversation.id}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ member_key: memberKey, content }),
+        body: JSON.stringify({ content }),
       });
       setDraft('');
       if (created?.message) setMessages(current => mergeMessages(current, [created.message]));
