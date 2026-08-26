@@ -37,6 +37,32 @@ function initials(name) {
 }
 
 
+function getCommunityPolicyViolation(value, lang) {
+  const content = String(value || '').trim();
+  if (!content) return '';
+
+  const hasExternalLink = /(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+(?:com|co\.za|net|org|shop|store|online|biz|io)\b)/i.test(content);
+  const hasEmail = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(content);
+  const hasPhone = /(?:\+?\d[\d\s().-]{7,}\d)/.test(content);
+  const hasSocialHandle = /(^|\s)@[a-z0-9_.]{3,}\b/i.test(content);
+  const hasDirectPromotion = /\b(?:dm me|message me|inbox me|whatsapp me|contact me|call me|order now|buy now|book now|shop now|use my code|promo code|discount code|special offer|for sale|i sell|we sell|my business|my services?|my products?|follow my|visit my|link in bio|stuur my (?:'n|’n|n) boodskap|whatsapp my|kontak my|bel my|bestel nou|koop nou|bespreek nou|te koop|ek verkoop|ons verkoop|my besigheid|my dienste?|my produkte?|volg my|afslagkode|promosiekode|spesiale aanbod)\b/i.test(content);
+
+  if (hasDirectPromotion) {
+    return lang === 'en'
+      ? 'Advertising, selling and self-promotion are not allowed in the We-Rise Community.'
+      : 'Advertensies, verkope en selfpromosie word nie in die We-Rise Gemeenskap toegelaat nie.';
+  }
+
+  if (hasExternalLink || hasEmail || hasPhone || hasSocialHandle) {
+    return lang === 'en'
+      ? 'External links and contact details are not allowed in Community posts or comments.'
+      : 'Eksterne skakels en kontakbesonderhede word nie in Gemeenskap-plasings of kommentaar toegelaat nie.';
+  }
+
+  return '';
+}
+
+
 function CommunityAvatar({ name, small = false }) {
   return (
     <div className={`community-avatar ${small ? 'community-avatar-small' : ''}`} aria-hidden="true">
@@ -107,6 +133,11 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
     if (!isAuthenticated) { onRequireAuth?.(); return; }
     const content = postText.trim();
     if (!content || content.length > MAX_COMMUNITY_CHARS || posting) return;
+    const policyViolation = getCommunityPolicyViolation(content, lang);
+    if (policyViolation) {
+      showToast(policyViolation);
+      return;
+    }
     setPosting(true);
     try {
       const created = await apiRequest('/api/topics', {
@@ -128,6 +159,11 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
     if (!isAuthenticated) { onRequireAuth?.(); return; }
     const content = commentText.trim();
     if (!selectedTopicId || !content || content.length > MAX_COMMUNITY_CHARS || commentPosting) return;
+    const policyViolation = getCommunityPolicyViolation(content, lang);
+    if (policyViolation) {
+      showToast(policyViolation);
+      return;
+    }
     setCommentPosting(true);
     try {
       await apiRequest(`/api/topics/${selectedTopicId}/comments`, {
@@ -332,6 +368,16 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
         </a>
       </div>
 
+      <div className="community-policy-strip">
+        <div className="community-policy-icon"><HiShieldCheck /></div>
+        <div>
+          <strong>{lang === 'en' ? 'Community, not a marketplace' : 'Gemeenskap, nie ’n markplek nie'}</strong>
+          <span>{lang === 'en'
+            ? 'No business advertising, product or service promotion, sales links, social handles or contact details. Promotional posts and comments are blocked.'
+            : 'Geen besigheidsadvertensies, produk- of dienspromosie, verkoopskakels, sosiale media-handvatsels of kontakbesonderhede nie. Promosieplasings en -kommentaar word geblokkeer.'}</span>
+        </div>
+      </div>
+
       <section className="community-composer-card">
         <div className="community-composer-header">
           <CommunityAvatar name={authorName} />
@@ -350,7 +396,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
           onChange={event => setPostText(event.target.value)}
           onKeyDown={event => handleComposerKeyDown(event, handleCreatePost)}
           placeholder={isAuthenticated
-            ? (lang === 'en' ? 'What would you like to share or ask today?' : 'Wat wil jy vandag deel of vra?')
+            ? (lang === 'en' ? 'What would you like to share or ask today? No advertising or self-promotion.' : 'Wat wil jy vandag deel of vra? Geen advertensies of selfpromosie nie.')
             : (lang === 'en' ? 'Log in to share with the We-Rise community' : 'Meld aan om met die We-Rise gemeenskap te deel')}
         />
         <div className="community-composer-footer">
@@ -358,7 +404,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
             <span className={postText.length >= 230 ? 'community-counter is-near-limit' : 'community-counter'}>
               {postText.length}/{MAX_COMMUNITY_CHARS}
             </span>
-            <span className="community-kindness-note">{lang === 'en' ? 'Kindness first 💗' : 'Vriendelikheid eerste 💗'}</span>
+            <span className="community-kindness-note">{lang === 'en' ? 'No ads • Kindness first 💗' : 'Geen advertensies • Vriendelikheid eerste 💗'}</span>
           </div>
           <button
             type="button"

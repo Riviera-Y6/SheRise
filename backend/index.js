@@ -66,6 +66,47 @@ function cleanPhone(value) {
   return String(value || '').trim().replace(/[^0-9+]/g, '').slice(0, 32);
 }
 
+
+function communityPolicyError(value) {
+  const content = String(value || '').trim();
+  if (!content) return '';
+
+  const hasExternalLink = /(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+(?:com|co\.za|net|org|shop|store|online|biz|io)\b)/i.test(content);
+  const hasEmail = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(content);
+  const hasPhone = /(?:\+?\d[\d\s().-]{7,}\d)/.test(content);
+  const hasSocialHandle = /(^|\s)@[a-z0-9_.]{3,}\b/i.test(content);
+  const hasDirectPromotion = /\b(?:dm me|message me|inbox me|whatsapp me|contact me|call me|order now|buy now|book now|shop now|use my code|promo code|discount code|special offer|for sale|i sell|we sell|my business|my services?|my products?|follow my|visit my|link in bio|stuur my (?:'n|’n|n) boodskap|whatsapp my|kontak my|bel my|bestel nou|koop nou|bespreek nou|te koop|ek verkoop|ons verkoop|my besigheid|my dienste?|my produkte?|volg my|afslagkode|promosiekode|spesiale aanbod)\b/i.test(content);
+
+  if (hasDirectPromotion) {
+    return 'Advertising, selling, self-promotion and business solicitation are not allowed in the We-Rise Community.';
+  }
+
+  if (hasExternalLink || hasEmail || hasPhone || hasSocialHandle) {
+    return 'External links and contact details are not allowed in Community posts or comments. This helps keep We-Rise safe and free from advertising.';
+  }
+
+  return '';
+}
+
+
+function privateMessagePolicyError(value) {
+  const content = String(value || '').trim();
+  if (!content) return '';
+
+  const hasExternalLink = /(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+(?:com|co\.za|net|org|shop|store|online|biz|io)\b)/i.test(content);
+  const hasEmail = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(content);
+  const hasPhone = /(?:\+?\d[\d\s().-]{7,}\d)/.test(content);
+  const hasSocialHandle = /(^|\s)@[a-z0-9_.]{3,}\b/i.test(content);
+  const hasCommercialLanguage = /\b(?:business|businesses|product|products|service|services|customer|customers|client|clients|sale|sales|discount|special|offer|offers|shop|store|brand|marketing|advertis(?:e|ing)|business|besigheid|besighede|produk|produkte|diens|dienste|kli[eë]nt|kliente|verkoop|afslag|aanbieding|winkel|handelsmerk|bemark|adverteer)\b/i.test(content);
+  const hasDirectPromotion = /\b(?:dm me|message me|inbox me|whatsapp me|contact me|call me|order now|buy now|book now|shop now|use my code|promo code|discount code|special offer|for sale|i sell|we sell|my business|my services?|my products?|follow my|visit my|link in bio|stuur my (?:'n|’n|n) boodskap|whatsapp my|kontak my|bel my|bestel nou|koop nou|bespreek nou|te koop|ek verkoop|ons verkoop|my besigheid|my dienste?|my produkte?|volg my|afslagkode|promosiekode|spesiale aanbod)\b/i.test(content);
+
+  if (hasDirectPromotion || (hasCommercialLanguage && (hasExternalLink || hasEmail || hasPhone || hasSocialHandle))) {
+    return 'Unsolicited business advertising and self-promotion are not allowed in We-Rise Messages.';
+  }
+
+  return '';
+}
+
 function profileNameFromUser(user) {
   const metadataName = String(user?.user_metadata?.display_name || user?.user_metadata?.full_name || '').trim();
   if (metadataName) return cleanName(metadataName, 'We-Rise Lady');
@@ -312,6 +353,8 @@ app.post('/api/topics', async (c) => {
     const cleanTitle = String(title || '').trim();
     if (!cleanTitle) return c.json({ error: 'A community message is required.' }, 400);
     if (cleanTitle.length > MAX_COMMUNITY_CHARS) return c.json({ error: `Community messages are limited to ${MAX_COMMUNITY_CHARS} characters.` }, 400);
+    const policyError = communityPolicyError(cleanTitle);
+    if (policyError) return c.json({ error: policyError, code: 'COMMUNITY_PROMOTION_NOT_ALLOWED' }, 400);
     const { data, error } = await supabase.from('community_topics').insert({
       title: cleanTitle,
       author: auth.profile.display_name,
@@ -349,6 +392,8 @@ app.post('/api/topics/:id/comments', async (c) => {
     const cleanContent = String(content || '').trim();
     if (!cleanContent) return c.json({ error: 'A comment is required.' }, 400);
     if (cleanContent.length > MAX_COMMUNITY_CHARS) return c.json({ error: `Comments are limited to ${MAX_COMMUNITY_CHARS} characters.` }, 400);
+    const policyError = communityPolicyError(cleanContent);
+    if (policyError) return c.json({ error: policyError, code: 'COMMUNITY_PROMOTION_NOT_ALLOWED' }, 400);
     const { data: topic, error: topicError } = await supabase.from('community_topics').select('id').eq('id', topicId).maybeSingle();
     if (topicError) throw topicError;
     if (!topic) return c.json({ error: 'Conversation not found.' }, 404);
@@ -528,6 +573,9 @@ app.post('/api/conversations/:id/messages', async (c) => {
         limit: messageLimit,
       }, 400);
     }
+
+    const policyError = privateMessagePolicyError(cleanContent);
+    if (policyError) return c.json({ error: policyError, code: 'MESSAGE_PROMOTION_NOT_ALLOWED' }, 400);
 
     const receiverKey = conversation.member_a_key === memberKey ? conversation.member_b_key : conversation.member_a_key;
     const { data: message, error } = await supabase.from('private_messages').insert({

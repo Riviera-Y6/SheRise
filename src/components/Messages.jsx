@@ -53,6 +53,26 @@ function mergeMessages(current, incoming) {
   return [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
 }
 
+function getDirectMessagePolicyViolation(value, lang) {
+  const content = String(value || '').trim();
+  if (!content) return '';
+
+  const hasExternalLink = /(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+(?:com|co\.za|net|org|shop|store|online|biz|io)\b)/i.test(content);
+  const hasEmail = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(content);
+  const hasPhone = /(?:\+?\d[\d\s().-]{7,}\d)/.test(content);
+  const hasSocialHandle = /(^|\s)@[a-z0-9_.]{3,}\b/i.test(content);
+  const hasCommercialLanguage = /\b(?:business|businesses|product|products|service|services|customer|customers|client|clients|sale|sales|discount|special|offer|offers|shop|store|brand|marketing|advertis(?:e|ing)|besigheid|besighede|produk|produkte|diens|dienste|kli[eë]nt|kliente|verkoop|afslag|aanbieding|winkel|handelsmerk|bemark|adverteer)\b/i.test(content);
+  const hasDirectPromotion = /\b(?:dm me|message me|inbox me|whatsapp me|contact me|call me|order now|buy now|book now|shop now|use my code|promo code|discount code|special offer|for sale|i sell|we sell|my business|my services?|my products?|follow my|visit my|link in bio|stuur my (?:'n|’n|n) boodskap|whatsapp my|kontak my|bel my|bestel nou|koop nou|bespreek nou|te koop|ek verkoop|ons verkoop|my besigheid|my dienste?|my produkte?|volg my|afslagkode|promosiekode|spesiale aanbod)\b/i.test(content);
+
+  if (hasDirectPromotion || (hasCommercialLanguage && (hasExternalLink || hasEmail || hasPhone || hasSocialHandle))) {
+    return lang === 'en'
+      ? 'Business advertising and unsolicited self-promotion are not allowed in We-Rise Messages.'
+      : 'Besigheidsadvertensies en ongevraagde selfpromosie word nie in We-Rise Boodskappe toegelaat nie.';
+  }
+
+  return '';
+}
+
 export default function Messages({ lang, showToast, userName, memberKey, memberPlan = 'free', onConversationChange }) {
   const [view, setView] = useState('inbox');
   const [inbox, setInbox] = useState([]);
@@ -103,6 +123,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
     startError: 'Could not start the conversation.',
     premiumSoon: 'Premium billing will be connected in the next billing phase.',
     unread: 'unread',
+    noAds: 'No business advertising or unsolicited promotion.',
   } : {
     title: 'Boodskappe',
     subtitle: 'Direkte gesprekke tussen We-Rise Ladies',
@@ -135,6 +156,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
     startError: 'Kon nie die gesprek begin nie.',
     premiumSoon: 'Premium-betaling word in die volgende betalingsfase gekoppel.',
     unread: 'ongelees',
+    noAds: 'Geen besigheidsadvertensies of ongevraagde promosie nie.',
   };
 
   const messageLimit = memberPlan === 'premium' ? PREMIUM_MESSAGE_LIMIT : FREE_MESSAGE_LIMIT;
@@ -263,6 +285,11 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
   const sendMessage = async () => {
     const content = draft.trim();
     if (!content || !selectedConversation?.id || sending || content.length > messageLimit) return;
+    const policyViolation = getDirectMessagePolicyViolation(content, lang);
+    if (policyViolation) {
+      showToast(policyViolation);
+      return;
+    }
     setSending(true);
     try {
       const created = await apiRequest(`/api/conversations/${selectedConversation.id}/messages`, {
@@ -404,6 +431,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
             </span>
             <span>{messageLimit.toLocaleString('en-ZA')} {strings.chars}</span>
           </div>
+          <div className="messages-policy-line">{strings.noAds}</div>
         </div>
       </div>
     );
