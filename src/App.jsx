@@ -19,6 +19,7 @@ import Footer from './components/Footer';
 import Waitlist from './components/Waitlist';
 import AuthModal from './components/AuthModal';
 import FeatureLock from './components/FeatureLock';
+import Manifesto from './components/Manifesto';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home', public: true },
@@ -328,6 +329,8 @@ export default function App() {
 
         {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen && isAuthenticated)) && <Footer t={t} />}
       </main>
+
+      <Manifesto />
 
       <nav className="bottom-nav" aria-label="Main navigation">
         {TABS.map(tab => {
