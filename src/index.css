@@ -4077,7 +4077,8 @@ textarea.input {
 .manifesto-fab {
   position: fixed;
   right: max(14px, calc((100vw - 480px) / 2 + 14px));
-  bottom: calc(76px + env(safe-area-inset-bottom));
+  top: calc(74px + env(safe-area-inset-top));
+  bottom: auto;
   z-index: 240;
   display: inline-flex;
   align-items: center;
@@ -4115,6 +4116,8 @@ textarea.input {
 }
 .manifesto-fab-icon svg { font-size: 15px; }
 .manifesto-fab-label {
+  display: inline-block;
+  white-space: nowrap;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .02em;
@@ -4329,8 +4332,12 @@ textarea.input {
 @media (max-width: 360px) {
   .manifesto-fab {
     right: 10px;
-    padding-right: 9px;
+    padding: 7px 11px 7px 7px;
   }
-  .manifesto-fab-label { display: none; }
-  .manifesto-fab-icon { width: 32px; height: 32px; }
+  /* Keep the Manifesto label visible even on narrow portrait phones. */
+  .manifesto-fab-label {
+    display: inline-block;
+    white-space: nowrap;
+  }
+  .manifesto-fab-icon { width: 29px; height: 29px; }
 }
