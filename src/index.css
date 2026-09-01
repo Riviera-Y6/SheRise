@@ -4654,3 +4654,26 @@ textarea.input {
   .wealth-delete { width: 100%; }
   .wealth-title h1 { font-size: 28px; }
 }
+
+/* Welvaart assessment-state fix */
+.wealth-meter-empty {
+  display: grid;
+  gap: 4px;
+  margin-top: 2px;
+}
+.wealth-meter-empty strong {
+  color: var(--pink-light);
+  font-size: 12px;
+}
+.wealth-meter-empty span {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.wealth-pillar-unassessed .wealth-mini-progress > div { width: 0 !important; }
+.wealth-status-unknown {
+  color: var(--text-muted) !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+}

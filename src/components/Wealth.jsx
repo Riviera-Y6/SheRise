@@ -33,6 +33,8 @@ const EMPTY = {
   goals: [],
   debtPlanner: { balance: 0, rate: 10.5, payment: 0, extra: 0 },
   whatIf: { scenario: 'partner_income', lostIncome: 0 },
+  debtStatus: 'unknown',
+  assessed: { income: false, protection: false, capital: false, assets: false, debt: false, retirement: false },
 };
 
 const money = (value) => `R${Math.max(0, Number(value || 0)).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}`;
@@ -74,7 +76,25 @@ export default function Wealth({ lang = 'af', showToast }) {
     apiRequest('/api/wealth')
       .then((res) => {
         if (!mounted) return;
-        setData({ ...EMPTY, ...(res?.data || {}), debtPlanner: { ...EMPTY.debtPlanner, ...(res?.data?.debtPlanner || {}) }, whatIf: { ...EMPTY.whatIf, ...(res?.data?.whatIf || {}) }, incomeStreams: Array.isArray(res?.data?.incomeStreams) ? res.data.incomeStreams : [], goals: Array.isArray(res?.data?.goals) ? res.data.goals : [] });
+        const saved = res?.data || {};
+        const legacyAssessed = {
+          income: num(saved.monthlyIncome) > 0 || (Array.isArray(saved.incomeStreams) && saved.incomeStreams.some((x) => num(x?.amount) > 0)),
+          protection: num(saved.monthlyExpenses) > 0 || num(saved.emergencyFund) > 0,
+          capital: num(saved.liquidCapital) > 0,
+          assets: num(saved.assetsValue) > 0,
+          debt: saved.debtStatus === 'debt_free' || saved.debtStatus === 'has_debt' || num(saved.debtBalance) > 0,
+          retirement: num(saved.retirementSavings) > 0 || num(saved.retirementMonthlyContribution) > 0,
+        };
+        setData({
+          ...EMPTY,
+          ...saved,
+          debtPlanner: { ...EMPTY.debtPlanner, ...(saved.debtPlanner || {}) },
+          whatIf: { ...EMPTY.whatIf, ...(saved.whatIf || {}) },
+          assessed: { ...EMPTY.assessed, ...legacyAssessed, ...(saved.assessed || {}) },
+          debtStatus: saved.debtStatus || (num(saved.debtBalance) > 0 ? 'has_debt' : 'unknown'),
+          incomeStreams: Array.isArray(saved.incomeStreams) ? saved.incomeStreams : [],
+          goals: Array.isArray(saved.goals) ? saved.goals : [],
+        });
       })
       .catch(() => showToast?.(af ? 'Kon nie jou Welvaart-data laai nie.' : 'Could not load your Wealth data.'))
       .finally(() => mounted && setLoading(false));
@@ -82,26 +102,45 @@ export default function Wealth({ lang = 'af', showToast }) {
   }, [af, showToast]);
 
   const update = (field, value) => setData((d) => ({ ...d, [field]: value }));
+  const updateAndAssess = (field, value, pillar) => setData((d) => ({ ...d, [field]: value, assessed: { ...d.assessed, [pillar]: true } }));
+  const setDebtStatus = (value) => setData((d) => ({ ...d, debtStatus: value, debtBalance: value === 'debt_free' ? 0 : d.debtBalance, assessed: { ...d.assessed, debt: value !== 'unknown' } }));
   const updateNested = (group, field, value) => setData((d) => ({ ...d, [group]: { ...d[group], [field]: value } }));
 
   const metrics = useMemo(() => {
+    const assessed = { ...EMPTY.assessed, ...(data.assessed || {}) };
     const baseIncome = num(data.monthlyIncome);
     const streamIncome = (data.incomeStreams || []).reduce((s, x) => s + num(x.amount), 0);
     const totalIncome = baseIncome + streamIncome;
     const expenses = num(data.monthlyExpenses);
     const emergencyMonths = expenses ? num(data.emergencyFund) / expenses : 0;
     const monthlySurplus = Math.max(0, totalIncome - expenses);
-    const incomeScore = clamp((totalIncome > 0 ? 35 : 0) + (streamIncome > 0 ? 25 : 0) + (monthlySurplus > 0 ? Math.min(40, (monthlySurplus / Math.max(totalIncome, 1)) * 100) : 0));
-    const protectionScore = clamp((emergencyMonths / 6) * 100);
-    const capitalScore = clamp(expenses ? (num(data.liquidCapital) / (expenses * 6)) * 100 : (data.liquidCapital ? 35 : 0));
-    const assetScore = clamp(num(data.assetsValue) ? 30 + Math.min(70, num(data.assetsValue) / Math.max(expenses * 24, 1) * 70) : 0);
-    const debtScore = clamp(data.debtBalance ? Math.max(0, 100 - (num(data.debtBalance) / Math.max(totalIncome * 24, 1)) * 100) : 100);
+
+    const incomeScore = assessed.income
+      ? clamp((totalIncome > 0 ? 35 : 0) + (streamIncome > 0 ? 25 : 0) + (expenses > 0 && monthlySurplus > 0 ? Math.min(40, (monthlySurplus / Math.max(totalIncome, 1)) * 100) : 0))
+      : null;
+    const protectionScore = assessed.protection ? clamp(expenses > 0 ? (emergencyMonths / 6) * 100 : 0) : null;
+    const capitalScore = assessed.capital ? clamp(expenses > 0 ? (num(data.liquidCapital) / (expenses * 6)) * 100 : (num(data.liquidCapital) > 0 ? 35 : 0)) : null;
+    const assetScore = assessed.assets ? clamp(num(data.assetsValue) > 0 ? 30 + Math.min(70, num(data.assetsValue) / Math.max(expenses * 24, 1) * 70) : 0) : null;
+
+    let debtScore = null;
+    if (assessed.debt) {
+      if (data.debtStatus === 'debt_free') debtScore = 100;
+      else if (data.debtStatus === 'has_debt') debtScore = clamp(Math.max(0, 100 - (num(data.debtBalance) / Math.max(totalIncome * 24, 1)) * 100));
+      else debtScore = 0;
+    }
+
     const years = Math.max(0, num(data.retirementAge) - num(data.age));
     const projected = futureValue(data.retirementSavings, data.retirementMonthlyContribution, years, data.retirementGrowthRate);
     const retirementTarget = expenses * 12 * 20;
-    const retirementScore = clamp(retirementTarget ? (projected / retirementTarget) * 100 : (projected ? 25 : 0));
-    const pillars = [incomeScore, protectionScore, capitalScore, assetScore, debtScore, retirementScore];
-    return { totalIncome, streamIncome, expenses, emergencyMonths, monthlySurplus, projected, retirementTarget, scores: pillars, overall: Math.round(pillars.reduce((a, b) => a + b, 0) / pillars.length) };
+    const retirementScore = assessed.retirement ? clamp(retirementTarget > 0 ? (projected / retirementTarget) * 100 : (projected > 0 ? 25 : 0)) : null;
+
+    const scores = [incomeScore, protectionScore, capitalScore, assetScore, debtScore, retirementScore];
+    const assessedCount = scores.filter((score) => score !== null).length;
+    // Unknown pillars never create free progress. They display as "not yet assessed" and contribute 0 until completed.
+    const overall = Math.round(scores.reduce((sum, score) => sum + (score ?? 0), 0) / scores.length);
+    const foundationReady = assessed.income && assessed.protection;
+
+    return { totalIncome, streamIncome, expenses, emergencyMonths, monthlySurplus, projected, retirementTarget, scores, overall, assessedCount, foundationReady };
   }, [data]);
 
   const save = async () => {
@@ -114,7 +153,7 @@ export default function Wealth({ lang = 'af', showToast }) {
     } finally { setSaving(false); }
   };
 
-  const addIncome = () => setData((d) => ({ ...d, incomeStreams: [...d.incomeStreams, { id: crypto.randomUUID?.() || Date.now().toString(), name: '', amount: 0 }] }));
+  const addIncome = () => setData((d) => ({ ...d, assessed: { ...d.assessed, income: true }, incomeStreams: [...d.incomeStreams, { id: crypto.randomUUID?.() || Date.now().toString(), name: '', amount: 0 }] }));
   const addGoal = () => setData((d) => ({ ...d, goals: [...d.goals, { id: crypto.randomUUID?.() || Date.now().toString(), name: '', target: 0, saved: 0 }] }));
   const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
 
@@ -154,26 +193,27 @@ export default function Wealth({ lang = 'af', showToast }) {
       <div className="wealth-meter-card">
         <div className="wealth-meter-head"><h2>{af ? 'My Finansiële Veerkrag' : 'My Financial Resilience'}</h2><span>{metrics.overall}%</span></div>
         <div className="wealth-progress"><div style={{ width: `${metrics.overall}%` }} /></div>
-        <div className="wealth-meter-foot"><strong>{money(metrics.monthlySurplus)}</strong><span>{af ? 'maandelikse ruimte ná uitgawes' : 'monthly room after expenses'}</span></div>
+        {metrics.assessedCount === 0 ? <div className="wealth-meter-empty"><strong>{af ? 'Nog geen finansiële profiel voltooi nie.' : 'No financial profile completed yet.'}</strong><span>{af ? 'Begin by My Finansiële Grondslag hieronder.' : 'Start with My Financial Foundation below.'}</span></div> : metrics.foundationReady ? <div className="wealth-meter-foot"><strong>{money(metrics.monthlySurplus)}</strong><span>{af ? 'maandelikse ruimte ná uitgawes' : 'monthly room after expenses'}</span></div> : <div className="wealth-meter-empty"><strong>{af ? `${metrics.assessedCount} van 6 pilare bepaal` : `${metrics.assessedCount} of 6 pillars assessed`}</strong><span>{af ? 'Voltooi inkomste en uitgawes om jou maandelikse ruimte te bereken.' : 'Complete income and expenses to calculate your monthly room.'}</span></div>}
       </div>
 
       <div className="wealth-panel">
         <h2>{af ? 'Die 6 Pilare van Welvaart' : 'The 6 Pillars of Wealth'}</h2>
         <p>{af ? 'Bou elke pilaar en jy bou ’n toekoms wat minder van ander afhanklik is.' : 'Build every pillar and you build a future that depends less on others.'}</p>
         <div className="wealth-pillars">
-          {pillars.map(({ icon: Icon, title, score, desc }) => <div className="wealth-pillar" key={title}><div className="wealth-pillar-icon"><Icon /></div><div className="wealth-pillar-copy"><div className="wealth-pillar-row"><strong>{title}</strong><span>{Math.round(score)}%</span></div><div className="wealth-mini-progress"><div style={{ width: `${score}%` }} /></div><small>{desc}</small></div></div>)}
+          {pillars.map(({ icon: Icon, title, score, desc }) => { const known = score !== null; return <div className={`wealth-pillar ${known ? '' : 'wealth-pillar-unassessed'}`} key={title}><div className="wealth-pillar-icon"><Icon /></div><div className="wealth-pillar-copy"><div className="wealth-pillar-row"><strong>{title}</strong><span className={known ? '' : 'wealth-status-unknown'}>{known ? `${Math.round(score)}%` : (af ? 'Nog nie bepaal nie' : 'Not yet assessed')}</span></div><div className="wealth-mini-progress"><div style={{ width: `${known ? score : 0}%` }} /></div><small>{desc}</small></div></div> })}
         </div>
       </div>
 
       <div className="wealth-accordion">
         <button className="wealth-accordion-head" onClick={() => toggle('profile')}><span><HiCalculator /> {af ? 'My Finansiële Grondslag' : 'My Financial Foundation'}</span>{open.profile ? <HiChevronUp/> : <HiChevronDown/>}</button>
         {open.profile && <div className="wealth-accordion-body wealth-grid-2">
-          <label>{af ? 'Hoof maandelikse inkomste' : 'Main monthly income'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.monthlyIncome || ''} onChange={e => update('monthlyIncome', num(e.target.value))}/></div></label>
-          <label>{af ? 'Noodsaaklike maandelikse uitgawes' : 'Essential monthly expenses'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.monthlyExpenses || ''} onChange={e => update('monthlyExpenses', num(e.target.value))}/></div></label>
-          <label>{af ? 'Noodfonds' : 'Emergency fund'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.emergencyFund || ''} onChange={e => update('emergencyFund', num(e.target.value))}/></div></label>
-          <label>{af ? 'Beskikbare kapitaal / spaargeld' : 'Accessible capital / savings'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.liquidCapital || ''} onChange={e => update('liquidCapital', num(e.target.value))}/></div></label>
-          <label>{af ? 'Geskatte waarde van bates' : 'Estimated asset value'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.assetsValue || ''} onChange={e => update('assetsValue', num(e.target.value))}/></div></label>
-          <label>{af ? 'Totale uitstaande skuld' : 'Total outstanding debt'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.debtBalance || ''} onChange={e => update('debtBalance', num(e.target.value))}/></div></label>
+          <label>{af ? 'Hoof maandelikse inkomste' : 'Main monthly income'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.monthlyIncome || ''} onChange={e => updateAndAssess('monthlyIncome', num(e.target.value), 'income')}/></div></label>
+          <label>{af ? 'Noodsaaklike maandelikse uitgawes' : 'Essential monthly expenses'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.monthlyExpenses || ''} onChange={e => setData((d) => ({ ...d, monthlyExpenses: num(e.target.value), assessed: { ...d.assessed, protection: true } }))}/></div></label>
+          <label>{af ? 'Noodfonds' : 'Emergency fund'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.emergencyFund || ''} onChange={e => updateAndAssess('emergencyFund', num(e.target.value), 'protection')}/></div></label>
+          <label>{af ? 'Beskikbare kapitaal / spaargeld' : 'Accessible capital / savings'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.liquidCapital || ''} onChange={e => updateAndAssess('liquidCapital', num(e.target.value), 'capital')}/></div></label>
+          <label>{af ? 'Geskatte waarde van bates' : 'Estimated asset value'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.assetsValue || ''} onChange={e => updateAndAssess('assetsValue', num(e.target.value), 'assets')}/></div></label>
+          <label>{af ? 'My skuldposisie' : 'My debt position'}<select value={data.debtStatus || 'unknown'} onChange={e => setDebtStatus(e.target.value)}><option value="unknown">{af ? 'Kies ’n opsie' : 'Choose an option'}</option><option value="debt_free">{af ? 'Ek het geen uitstaande skuld nie' : 'I have no outstanding debt'}</option><option value="has_debt">{af ? 'Ek het uitstaande skuld' : 'I have outstanding debt'}</option></select></label>
+          {data.debtStatus === 'has_debt' && <label>{af ? 'Totale uitstaande skuld' : 'Total outstanding debt'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.debtBalance || ''} onChange={e => updateAndAssess('debtBalance', num(e.target.value), 'debt')}/></div></label>}
         </div>}
       </div>
 
@@ -191,7 +231,7 @@ export default function Wealth({ lang = 'af', showToast }) {
       <div className="wealth-accordion">
         <button className="wealth-accordion-head" onClick={() => toggle('income')}><span><HiCurrencyDollar /> {af ? 'My Inkomste-bronne' : 'My Income Streams'}</span>{open.income ? <HiChevronUp/> : <HiChevronDown/>}</button>
         {open.income && <div className="wealth-accordion-body">
-          {(data.incomeStreams || []).map((item, i) => <div className="wealth-list-row" key={item.id || i}><input placeholder={af ? 'bv. Sybesigheid' : 'e.g. Side business'} value={item.name || ''} onChange={e => setData(d => ({...d, incomeStreams:d.incomeStreams.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))}/><div className="wealth-money-input"><span>R</span><input type="number" value={item.amount || ''} onChange={e => setData(d => ({...d, incomeStreams:d.incomeStreams.map((x,j)=>j===i?{...x,amount:num(e.target.value)}:x)}))}/></div><button className="wealth-delete" onClick={() => setData(d => ({...d,incomeStreams:d.incomeStreams.filter((_,j)=>j!==i)}))}><HiTrash/></button></div>)}
+          {(data.incomeStreams || []).map((item, i) => <div className="wealth-list-row" key={item.id || i}><input placeholder={af ? 'bv. Sybesigheid' : 'e.g. Side business'} value={item.name || ''} onChange={e => setData(d => ({...d, incomeStreams:d.incomeStreams.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))}/><div className="wealth-money-input"><span>R</span><input type="number" value={item.amount || ''} onChange={e => setData(d => ({...d, assessed:{...d.assessed,income:true}, incomeStreams:d.incomeStreams.map((x,j)=>j===i?{...x,amount:num(e.target.value)}:x)}))}/></div><button className="wealth-delete" onClick={() => setData(d => ({...d,incomeStreams:d.incomeStreams.filter((_,j)=>j!==i)}))}><HiTrash/></button></div>)}
           <button className="wealth-add" onClick={addIncome}><HiPlus/> {af ? 'Voeg inkomste-bron by' : 'Add income stream'}</button>
           <div className="wealth-summary-line"><span>{af ? 'Totale maandelikse inkomste' : 'Total monthly income'}</span><strong>{money(metrics.totalIncome)}</strong></div>
         </div>}
@@ -219,11 +259,11 @@ export default function Wealth({ lang = 'af', showToast }) {
       <div className="wealth-accordion">
         <button className="wealth-accordion-head" onClick={() => toggle('retirement')}><span><HiClock /> {af ? 'My Aftree-Welvaart' : 'My Retirement Wealth'}</span>{open.retirement ? <HiChevronUp/> : <HiChevronDown/>}</button>
         {open.retirement && <div className="wealth-accordion-body wealth-grid-2">
-          <label>{af?'My ouderdom':'My age'}<input type="number" min="18" max="100" value={data.age||''} onChange={e=>update('age',num(e.target.value))}/></label>
-          <label>{af?'Beplande aftree-ouderdom':'Planned retirement age'}<input type="number" min="30" max="100" value={data.retirementAge||''} onChange={e=>update('retirementAge',num(e.target.value))}/></label>
-          <label>{af?'Huidige aftree-spaargeld':'Current retirement savings'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.retirementSavings||''} onChange={e=>update('retirementSavings',num(e.target.value))}/></div></label>
-          <label>{af?'Maandelikse bydrae':'Monthly contribution'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.retirementMonthlyContribution||''} onChange={e=>update('retirementMonthlyContribution',num(e.target.value))}/></div></label>
-          <label>{af?'Opvoedkundige groeiaanname % p.j.':'Educational growth assumption % p.a.'}<input type="number" min="0" max="20" step="0.1" value={data.retirementGrowthRate||''} onChange={e=>update('retirementGrowthRate',num(e.target.value))}/></label>
+          <label>{af?'My ouderdom':'My age'}<input type="number" min="18" max="100" value={data.age||''} onChange={e=>updateAndAssess('age',num(e.target.value),'retirement')}/></label>
+          <label>{af?'Beplande aftree-ouderdom':'Planned retirement age'}<input type="number" min="30" max="100" value={data.retirementAge||''} onChange={e=>updateAndAssess('retirementAge',num(e.target.value),'retirement')}/></label>
+          <label>{af?'Huidige aftree-spaargeld':'Current retirement savings'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.retirementSavings||''} onChange={e=>updateAndAssess('retirementSavings',num(e.target.value),'retirement')}/></div></label>
+          <label>{af?'Maandelikse bydrae':'Monthly contribution'}<div className="wealth-money-input"><span>R</span><input type="number" value={data.retirementMonthlyContribution||''} onChange={e=>updateAndAssess('retirementMonthlyContribution',num(e.target.value),'retirement')}/></div></label>
+          <label>{af?'Opvoedkundige groeiaanname % p.j.':'Educational growth assumption % p.a.'}<input type="number" min="0" max="20" step="0.1" value={data.retirementGrowthRate||''} onChange={e=>updateAndAssess('retirementGrowthRate',num(e.target.value),'retirement')}/></label>
           <div className="wealth-projection wealth-span-2"><small>{af?'Geskatte toekomstige waarde teen aftrede':'Estimated future value at retirement'}</small><strong>{money(metrics.projected)}</strong><p>{af?'Hierdie is slegs ’n opvoedkundige projeksie en nie ’n gewaarborgde opbrengs nie.':'This is an educational projection only and not a guaranteed return.'}</p></div>
         </div>}
       </div>
