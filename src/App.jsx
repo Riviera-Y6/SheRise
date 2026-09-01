@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout
+  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp
 } from 'react-icons/hi';
 import translations from './i18n/translations';
 import { apiRequest } from './lib/api';
@@ -15,6 +15,7 @@ import Journal from './components/Journal';
 import Safety from './components/Safety';
 import VisionBoard from './components/VisionBoard';
 import Wellness from './components/Wellness';
+import Wealth from './components/Wealth';
 import Footer from './components/Footer';
 import Waitlist from './components/Waitlist';
 import AuthModal from './components/AuthModal';
@@ -27,6 +28,7 @@ const TABS = [
   { id: 'journal', icon: HiPencil, labelKey: 'journalTitle' },
   { id: 'vision', icon: HiStar, labelKey: 'visionTitle' },
   { id: 'wellness', icon: HiEmojiHappy, labelKey: 'wellnessTitle' },
+  { id: 'wealth', icon: HiTrendingUp, labelKey: 'wealthTitle' },
   { id: 'safety', icon: HiShieldCheck, labelKey: 'safetyTitle' },
   { id: 'backmi', icon: HiHeart, labelKey: 'backMi', public: true },
   { id: 'community', icon: HiUsers, labelKey: 'community', public: true },
@@ -40,6 +42,7 @@ const PROTECTED_FEATURE_COPY = {
   journal: { en: 'Personal Journal', af: 'Persoonlike Joernaal' },
   vision: { en: 'Vision Board', af: 'Visiebord' },
   wellness: { en: 'Wellness', af: 'Welstand' },
+  wealth: { en: 'Wealth', af: 'Welvaart' },
   safety: { en: 'Safety & Emergency Network', af: 'Veiligheid & Noodnetwerk' },
   messages: { en: 'Private Messages', af: 'Privaat Boodskappe' },
   resell: { en: 'Resell Programme', af: 'Herverkoopprogram' },
@@ -322,6 +325,7 @@ export default function App() {
 
         {activeTab === 'vision' && renderPrivateFeature(<VisionBoard t={t} lang={lang} showToast={showToast} />)}
         {activeTab === 'wellness' && renderPrivateFeature(<Wellness t={t} lang={lang} showToast={showToast} />)}
+        {activeTab === 'wealth' && renderPrivateFeature(<Wealth lang={lang} showToast={showToast} />)}
         {activeTab === 'safety' && renderPrivateFeature(<Safety t={t} lang={lang} showToast={showToast} memberKey={memberKey} userName={userName} />)}
         {activeTab === 'journal' && renderPrivateFeature(<Journal t={t} lang={lang} showToast={showToast} />)}
         {activeTab === 'waitlist' && <Waitlist lang={lang} userName={userName} showToast={showToast} />}

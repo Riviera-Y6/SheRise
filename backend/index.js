@@ -43,7 +43,7 @@ app.use('/api/*', cors({
     return allowedOrigins.has(normalized) ? origin : '';
   },
   allowHeaders: ['Content-Type', 'Authorization'],
-  allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   maxAge: 86400,
 }));
 
@@ -218,6 +218,87 @@ app.get('/api/auth/profile', async (c) => {
       user: { id: auth.user.id, email: auth.user.email || null },
       profile: auth.profile,
     });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+
+function sanitizeWealthPayload(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const n = (v, max = 1000000000) => {
+    const value = Number(v);
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(max, value));
+  };
+  const text = (v, max = 100) => String(v || '').trim().slice(0, max);
+  const incomeStreams = Array.isArray(source.incomeStreams) ? source.incomeStreams.slice(0, 20).map((item, index) => ({
+    id: text(item?.id || `income-${index}`, 80),
+    name: text(item?.name, 80),
+    amount: n(item?.amount),
+  })) : [];
+  const goals = Array.isArray(source.goals) ? source.goals.slice(0, 20).map((item, index) => ({
+    id: text(item?.id || `goal-${index}`, 80),
+    name: text(item?.name, 100),
+    target: n(item?.target),
+    saved: n(item?.saved),
+  })) : [];
+  return {
+    monthlyIncome: n(source.monthlyIncome),
+    monthlyExpenses: n(source.monthlyExpenses),
+    emergencyFund: n(source.emergencyFund),
+    liquidCapital: n(source.liquidCapital),
+    assetsValue: n(source.assetsValue),
+    debtBalance: n(source.debtBalance),
+    age: Math.max(18, Math.min(100, Math.round(n(source.age, 100) || 30))),
+    retirementAge: Math.max(30, Math.min(100, Math.round(n(source.retirementAge, 100) || 65))),
+    retirementSavings: n(source.retirementSavings),
+    retirementMonthlyContribution: n(source.retirementMonthlyContribution),
+    retirementGrowthRate: Math.min(20, n(source.retirementGrowthRate, 20)),
+    incomeStreams,
+    goals,
+    debtPlanner: {
+      balance: n(source.debtPlanner?.balance),
+      rate: Math.min(100, n(source.debtPlanner?.rate, 100)),
+      payment: n(source.debtPlanner?.payment),
+      extra: n(source.debtPlanner?.extra),
+    },
+    whatIf: {
+      scenario: ['partner_income', 'job_loss', 'cannot_work', 'retirement'].includes(source.whatIf?.scenario) ? source.whatIf.scenario : 'partner_income',
+      lostIncome: n(source.whatIf?.lostIncome),
+    },
+  };
+}
+
+app.get('/api/wealth', async (c) => {
+  try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const { data, error } = await supabase.from('wealth_profiles')
+      .select('data, updated_at')
+      .eq('member_key', auth.memberKey)
+      .maybeSingle();
+    if (error) throw error;
+    return c.json({ data: data?.data || {}, updated_at: data?.updated_at || null });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.put('/api/wealth', async (c) => {
+  try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const body = await c.req.json();
+    const clean = sanitizeWealthPayload(body?.data);
+    const now = new Date().toISOString();
+    const { data, error } = await supabase.from('wealth_profiles').upsert({
+      member_key: auth.memberKey,
+      data: clean,
+      updated_at: now,
+    }, { onConflict: 'member_key' }).select('data, updated_at').single();
+    if (error) throw error;
+    return c.json({ success: true, data: data.data, updated_at: data.updated_at });
   } catch (error) {
     return fail(c, error);
   }
