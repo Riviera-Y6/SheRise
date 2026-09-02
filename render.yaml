@@ -18,3 +18,23 @@ services:
         sync: false
       - key: ENABLE_EMERGENCY_SMS
         value: "false"
+      - key: API_PUBLIC_URL
+        value: https://werise-api.onrender.com
+      - key: PAYFAST_MODE
+        value: sandbox
+      - key: ENABLE_PAYFAST
+        value: "false"
+      - key: PAYFAST_MERCHANT_ID
+        sync: false
+      - key: PAYFAST_MERCHANT_KEY
+        sync: false
+      - key: PAYFAST_PASSPHRASE
+        sync: false
+      - key: ENABLE_BACKMI_PAYMENTS
+        value: "false"
+      - key: PAYFAST_IP_ALLOWLIST
+        sync: false
+      - key: WE_RISE_ADMIN_EMAILS
+        sync: false
+      - key: BACKMI_REVIEWER_EMAILS
+        sync: false

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp
+  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard
 } from 'react-icons/hi';
 import translations from './i18n/translations';
-import { apiRequest } from './lib/api';
+import { apiRequest, submitPayFastCheckout } from './lib/api';
 import { authConfigured, supabase } from './lib/supabase';
 import Home from './components/Home';
 import AiAssistant from './components/AiAssistant';
@@ -21,6 +21,8 @@ import Waitlist from './components/Waitlist';
 import AuthModal from './components/AuthModal';
 import FeatureLock from './components/FeatureLock';
 import Manifesto from './components/Manifesto';
+import MembershipLock from './components/MembershipLock';
+import Billing from './components/Billing';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home', public: true },
@@ -31,6 +33,7 @@ const TABS = [
   { id: 'wealth', icon: HiTrendingUp, labelKey: 'wealthTitle' },
   { id: 'safety', icon: HiShieldCheck, labelKey: 'safetyTitle' },
   { id: 'backmi', icon: HiHeart, labelKey: 'backMi', public: true },
+  { id: 'membership', icon: HiCreditCard, labelKey: 'membership' },
   { id: 'community', icon: HiUsers, labelKey: 'community', public: true },
   { id: 'messages', icon: HiChatAlt2, labelKey: 'messages' },
   { id: 'waitlist', icon: HiUserAdd, labelKey: 'waitlist', public: true },
@@ -85,6 +88,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(!authConfigured);
   const [profile, setProfile] = useState(null);
+  const [membership, setMembership] = useState(null);
   const [authModal, setAuthModal] = useState({ open: false, mode: 'login' });
 
   const t = translations[lang];
@@ -93,6 +97,7 @@ export default function App() {
   const memberKey = user?.id || '';
   const userName = profile?.display_name || fallbackName(user);
   const memberPlan = profile?.plan || 'free';
+  const hasMemberAccess = Boolean(isAuthenticated && membership?.access_allowed);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -109,6 +114,14 @@ export default function App() {
     showToast(lang === 'en' ? 'Log in to use this We-Rise feature.' : 'Meld aan om hierdie We-Rise funksie te gebruik.');
     return false;
   }, [isAuthenticated, lang, openAuth, showToast]);
+
+  const requireMemberAccess = useCallback(() => {
+    if (!requireAuth()) return false;
+    if (membership?.access_allowed) return true;
+    setActiveTab('membership');
+    showToast(lang === 'en' ? 'Your We-Rise membership needs attention.' : 'Jou We-Rise-lidmaatskap kort aandag.');
+    return false;
+  }, [lang, membership?.access_allowed, requireAuth, showToast]);
 
   useEffect(() => {
     if (!supabase) {
@@ -133,6 +146,7 @@ export default function App() {
       }
       if (event === 'SIGNED_OUT') {
         setProfile(null);
+        setMembership(null);
         setActiveTab('home');
       }
     });
@@ -146,6 +160,7 @@ export default function App() {
   const refreshProfile = useCallback(async () => {
     if (!session?.access_token) {
       setProfile(null);
+      setMembership(null);
       return;
     }
     try {
@@ -153,9 +168,11 @@ export default function App() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       setProfile(data?.profile || null);
+      setMembership(data?.membership || null);
     } catch (error) {
       if (error?.status === 401) {
         setProfile(null);
+        setMembership(null);
       }
     }
   }, [session?.access_token]);
@@ -182,18 +199,39 @@ export default function App() {
     refreshCampaigns();
   }, [refreshCampaigns]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+    if (!payment) return;
+    const paymentKind = params.get('kind');
+    setActiveTab(paymentKind === 'backmi' ? 'backmi' : 'membership');
+    showToast(payment === 'success'
+      ? (paymentKind === 'backmi'
+        ? (lang === 'en' ? 'PayFast returned you to BackMi. The gift will appear after secure confirmation.' : 'PayFast het jou na BackMi teruggestuur. Die geskenk sal ná veilige bevestiging verskyn.')
+        : (lang === 'en' ? 'PayFast returned you to We-Rise. We are waiting for secure payment confirmation.' : 'PayFast het jou na We-Rise teruggestuur. Ons wag vir die veilige betalingsbevestiging.'))
+      : (lang === 'en' ? 'The PayFast checkout was cancelled. No payment is recorded.' : 'Die PayFast-betaling is gekanselleer. Geen betaling is aangeteken nie.'));
+    window.history.replaceState({}, document.title, window.location.pathname);
+    if (payment === 'success') {
+      window.setTimeout(refreshProfile, 2000);
+      window.setTimeout(refreshProfile, 5000);
+      if (paymentKind === 'backmi') {
+        window.setTimeout(refreshCampaigns, 2000);
+        window.setTimeout(refreshCampaigns, 5000);
+      }
+    }
+  }, [lang, refreshCampaigns, refreshProfile, showToast]);
+
   const toggleLang = () => setLang(prev => prev === 'en' ? 'af' : 'en');
 
   const addCampaign = async (campaign) => {
-    if (!requireAuth()) return false;
+    if (!requireMemberAccess()) return false;
     try {
-      await apiRequest('/api/campaigns', {
+      const created = await apiRequest('/api/campaigns', {
         method: 'POST',
         body: JSON.stringify(campaign),
       });
-      await refreshCampaigns();
-      showToast(lang === 'en' ? 'Campaign launched! 🎉' : 'Veldtog gelanseer! 🎉');
-      return true;
+      showToast(lang === 'en' ? `Request ${created.request_code} was submitted privately for review.` : `Versoek ${created.request_code} is privaat ingedien vir beoordeling.`);
+      return created;
     } catch (error) {
       if (error?.status === 401) openAuth('login');
       showToast(error?.message || (lang === 'en' ? 'Could not save the campaign.' : 'Kon nie die veldtog stoor nie.'));
@@ -202,18 +240,17 @@ export default function App() {
   };
 
   const handleDonate = async (campaignId, amount) => {
-    if (!requireAuth()) return false;
+    if (!requireMemberAccess()) return false;
     try {
-      await apiRequest(`/api/campaigns/${campaignId}/donate`, {
+      const checkout = await apiRequest(`/api/backmi/requests/${campaignId}/gift-checkout`, {
         method: 'POST',
         body: JSON.stringify({ amount }),
       });
-      await refreshCampaigns();
-      showToast(lang === 'en' ? 'Thank you for your support! 💗' : 'Dankie vir jou ondersteuning! 💗');
+      submitPayFastCheckout(checkout);
       return true;
     } catch (error) {
       if (error?.status === 401) openAuth('login');
-      showToast(error?.message || (lang === 'en' ? 'Donation could not be recorded. Please try again.' : 'Die skenking kon nie aangeteken word nie. Probeer asseblief weer.'));
+      showToast(error?.message || (lang === 'en' ? 'The voluntary gift checkout could not start.' : 'Die vrywillige geskenkbetaling kon nie begin nie.'));
       return false;
     }
   };
@@ -240,7 +277,12 @@ export default function App() {
     );
   }, [activeTab, lang, openAuth, t]);
 
-  const renderPrivateFeature = (content) => isAuthenticated ? content : protectedContent;
+  const membershipLockedContent = useMemo(() => {
+    const feature = PROTECTED_FEATURE_COPY[activeTab]?.[lang] || t[TABS.find(item => item.id === activeTab)?.labelKey] || 'We-Rise';
+    return <MembershipLock lang={lang} feature={feature} membership={membership} onMembership={() => setActiveTab('membership')} />;
+  }, [activeTab, lang, membership, t]);
+
+  const renderPrivateFeature = (content) => !isAuthenticated ? protectedContent : hasMemberAccess ? content : membershipLockedContent;
 
   return (
     <div className="app-container">
@@ -295,9 +337,22 @@ export default function App() {
             onDonate={handleDonate}
             showToast={showToast}
             isAuthenticated={isAuthenticated}
+            hasMemberAccess={hasMemberAccess}
+            profile={profile}
             onRequireAuth={() => requireAuth()}
+            onRequireMembership={() => setActiveTab('membership')}
           />
         )}
+
+        {activeTab === 'membership' && (isAuthenticated ? (
+          <Billing
+            lang={lang}
+            membership={membership}
+            profile={profile}
+            showToast={showToast}
+            onRefreshProfile={refreshProfile}
+          />
+        ) : protectedContent)}
 
         {activeTab === 'community' && (
           <Community
@@ -306,8 +361,8 @@ export default function App() {
             showToast={showToast}
             userName={userName}
             memberKey={memberKey}
-            isAuthenticated={isAuthenticated}
-            onRequireAuth={() => requireAuth()}
+            isAuthenticated={hasMemberAccess}
+            onRequireAuth={() => requireMemberAccess()}
             onConversationChange={setCommunityConversationOpen}
           />
         )}
@@ -339,7 +394,7 @@ export default function App() {
       <nav className="bottom-nav" aria-label="Main navigation">
         {TABS.map(tab => {
           const Icon = tab.icon;
-          const locked = !tab.public && !isAuthenticated;
+          const locked = !tab.public && (!isAuthenticated || (tab.id !== 'membership' && !hasMemberAccess));
           return (
             <button
               key={tab.id}

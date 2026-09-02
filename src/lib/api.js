@@ -4,8 +4,9 @@ const configuredBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/
 
 export async function apiRequest(path, options = {}) {
   const url = `${configuredBase}${path}`;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers || {}),
   };
 
@@ -45,4 +46,21 @@ export async function apiRequest(path, options = {}) {
 
 export function getApiBase() {
   return configuredBase;
+}
+
+export function submitPayFastCheckout(checkout) {
+  if (!checkout?.action || !checkout?.fields) throw new Error('The PayFast checkout is incomplete.');
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = checkout.action;
+  form.style.display = 'none';
+  for (const [name, value] of Object.entries(checkout.fields)) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = String(value ?? '');
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
 }

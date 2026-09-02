@@ -404,3 +404,8 @@ create table if not exists public.wealth_profiles (
 );
 create index if not exists wealth_profiles_updated_idx on public.wealth_profiles(updated_at desc);
 alter table public.wealth_profiles enable row level security;
+
+-- IMPORTANT: The PayFast/BackMi payment release is intentionally maintained as
+-- an auditable migration. After this base schema, also run:
+-- supabase/migrations/0008_payfast_backmi.sql
+-- It removes the prototype pledge function above and replaces it with verified ITN processing.

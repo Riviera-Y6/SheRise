@@ -4677,3 +4677,163 @@ textarea.input {
   font-weight: 700 !important;
   white-space: nowrap;
 }
+
+/* We-Rise membership and verified BackMi payments */
+.membership-lock-points,
+.billing-principles,
+.backmi-trust-strip {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.membership-lock-points span,
+.billing-principles span,
+.backmi-trust-strip span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,105,180,.14);
+  border-radius: 12px;
+  background: rgba(255,105,180,.05);
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.membership-lock-points svg,
+.billing-principles svg,
+.backmi-trust-strip svg { flex: 0 0 auto; color: var(--pink); font-size: 17px; }
+.membership-lock .btn { margin-top: 4px; }
+
+.billing-page { display: grid; gap: 14px; }
+.billing-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.billing-hero .section-subtitle { margin-bottom: 0; }
+.membership-status-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 17px;
+  border: 1px solid rgba(255,105,180,.19);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,105,180,.12), rgba(44,35,67,.78));
+}
+.membership-status-icon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: rgba(255,105,180,.13);
+  color: var(--pink);
+  font-size: 25px;
+}
+.membership-status-card > div:last-child { display: grid; gap: 3px; }
+.membership-status-card span,
+.membership-status-card small { color: var(--text-muted); font-size: 9px; }
+.membership-status-card strong { color: #fff; font-size: 15px; }
+.membership-status-card.status-active { border-color: rgba(40,205,134,.25); background: linear-gradient(135deg, rgba(40,205,134,.10), rgba(44,35,67,.78)); }
+.membership-status-card.status-active .membership-status-icon { color: #49d998; background: rgba(40,205,134,.12); }
+.membership-price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.membership-price-card {
+  display: grid;
+  gap: 4px;
+  padding: 15px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+  background: rgba(45,45,68,.64);
+}
+.membership-price-card span { min-height: 28px; color: var(--text-secondary); font-size: 9px; line-height: 1.45; }
+.membership-price-card strong { color: #fff; font-size: 20px; }
+.membership-price-card small { color: var(--text-muted); font-size: 8px; line-height: 1.4; }
+.membership-price-card.featured { border-color: rgba(255,105,180,.28); box-shadow: inset 0 0 24px rgba(255,105,180,.05); }
+.membership-price-card.backmi-allocation-card strong { color: var(--pink-light); }
+.membership-checkout-card,
+.billing-history-card,
+.backmi-private-panel,
+.backmi-review-panel {
+  padding: 17px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 18px;
+  background: rgba(45,45,68,.62);
+}
+.membership-checkout-card { display: grid; grid-template-columns: auto 1fr auto; gap: 13px; align-items: center; }
+.membership-checkout-card > svg { color: var(--pink); font-size: 27px; }
+.membership-checkout-card strong { display: block; font-size: 12px; margin-bottom: 4px; }
+.membership-checkout-card p { color: var(--text-secondary); font-size: 9px; line-height: 1.5; }
+.payment-disabled-note { grid-column: 2 / -1; color: var(--warning); font-size: 8px; }
+.billing-history-card h3,
+.backmi-private-panel h3,
+.backmi-review-panel h3 { margin-bottom: 12px; font-size: 15px; }
+.billing-history-list,
+.backmi-status-list { display: grid; gap: 8px; }
+.billing-history-row,
+.backmi-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px;
+  border-radius: 12px;
+  background: rgba(17,17,32,.45);
+}
+.billing-history-row > div,
+.backmi-status-row > div { display: grid; gap: 3px; }
+.billing-history-row > div:last-child { text-align: right; }
+.billing-history-row strong,
+.backmi-status-row strong { font-size: 10px; }
+.billing-history-row span,
+.backmi-status-row span,
+.backmi-status-row small { color: var(--text-muted); font-size: 8px; }
+.payment-status,
+.request-status { display: inline-flex; padding: 4px 7px; border-radius: 20px; background: rgba(255,255,255,.06); font-weight: 800; text-transform: capitalize; }
+.payment-complete,
+.request-status.status-active,
+.request-status.status-target_reached { color: #49d998 !important; background: rgba(40,205,134,.10); }
+.request-status.status-pending_review,
+.request-status.status-info_required { color: #ffd166 !important; background: rgba(255,193,7,.09); }
+.admin-note { padding: 10px; border-radius: 10px; color: var(--warning); background: rgba(255,193,7,.06); font-size: 9px; text-align: center; }
+.payment-admin-card { padding: 17px; border: 1px solid rgba(255,193,7,.14); border-radius: 18px; background: rgba(45,45,68,.62); }
+.payment-admin-card h3 { margin: 4px 0 5px; font-size: 15px; }
+.payment-admin-card > p { margin-bottom: 13px; color: var(--text-secondary); font-size: 9px; line-height: 1.5; }
+.payment-admin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; margin-bottom: 12px; }
+.payment-admin-grid label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 8px; font-weight: 700; }
+.payment-admin-grid .admin-toggle { display: flex; align-items: center; gap: 7px; padding: 9px; border-radius: 10px; background: rgba(17,17,32,.4); }
+.ledger-balances { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+.ledger-balances > div { display: grid; gap: 3px; padding: 10px; border-radius: 10px; background: rgba(255,105,180,.05); }
+.ledger-balances span { color: var(--text-muted); font-size: 8px; text-transform: capitalize; }
+.ledger-balances strong { color: var(--pink-light); font-size: 12px; }
+.muted-copy { color: var(--text-muted); font-size: 10px; }
+
+.backmi-trust-strip { margin: -4px 0 16px; grid-template-columns: 1fr 1fr; }
+.backmi-request-code { color: var(--pink-light); font-size: 8px; font-weight: 800; letter-spacing: .03em; }
+.backmi-private-panel,
+.backmi-review-panel { margin-bottom: 16px; }
+.backmi-status-row { flex-wrap: wrap; }
+.backmi-status-row > small { flex-basis: 100%; padding-top: 4px; }
+.backmi-followup-upload { flex-basis: 100%; display: flex !important; grid-template-columns: none !important; flex-wrap: wrap; align-items: center; gap: 7px !important; padding-top: 6px; }
+.backmi-followup-upload input { max-width: 210px; color: var(--text-muted); font-size: 8px; }
+.review-request-card { display: grid; gap: 10px; padding: 13px; margin-top: 9px; border: 1px solid rgba(255,255,255,.06); border-radius: 13px; background: rgba(17,17,32,.4); }
+.review-request-card strong { font-size: 11px; }
+.review-request-card p { margin-top: 5px; color: var(--text-secondary); font-size: 9px; line-height: 1.5; }
+.review-request-card small { color: var(--pink-light); font-size: 8px; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.review-documents { display: flex; flex-wrap: wrap; gap: 7px; }
+.review-documents a,
+.review-documents span { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 9px; background: rgba(255,105,180,.07); color: var(--pink-light); font-size: 8px; text-decoration: none; }
+.backmi-review-warning { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 13px; padding: 11px; border: 1px solid rgba(255,105,180,.14); border-radius: 11px; color: var(--text-secondary); background: rgba(255,105,180,.05); font-size: 9px; line-height: 1.5; }
+.backmi-review-warning svg { flex: 0 0 auto; color: var(--pink); font-size: 17px; }
+.file-input { padding: 8px; }
+.gift-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 13px 0; }
+.gift-presets button { padding: 10px 5px; border: 1px solid rgba(255,105,180,.18); border-radius: 10px; color: var(--text-secondary); background: rgba(255,105,180,.05); cursor: pointer; font-weight: 800; }
+.gift-presets button.active { color: #fff; border-color: var(--pink); background: rgba(255,105,180,.18); }
+
+@media (max-width: 600px) {
+  .membership-price-grid,
+  .backmi-trust-strip { grid-template-columns: 1fr; }
+  .membership-checkout-card { grid-template-columns: auto 1fr; }
+  .membership-checkout-card .btn { grid-column: 1 / -1; }
+  .billing-hero { flex-direction: column; }
+  .payment-admin-grid,
+  .ledger-balances { grid-template-columns: 1fr; }
+}
