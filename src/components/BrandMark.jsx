@@ -7,7 +7,7 @@ export default function BrandMark({ variant = 'compact', className = '' }) {
   return (
     <img
       className={classes}
-      src={full ? '/we-rise-emblem.svg' : '/favicon.svg'}
+      src={full ? '/we-rise-emblem.svg?v=2' : '/favicon.svg?v=2'}
       alt={full ? 'We-Rise — Rise Together. Rise Forever.' : 'We-Rise'}
       draggable="false"
     />
