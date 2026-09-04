@@ -48,7 +48,7 @@ const PROTECTED_FEATURE_COPY = {
   wealth: { en: 'Wealth', af: 'Welvaart' },
   safety: { en: 'Safety & Emergency Network', af: 'Veiligheid & Noodnetwerk' },
   messages: { en: 'Private Messages', af: 'Privaat Boodskappe' },
-  resell: { en: 'Affiliate', af: 'Affiliate' },
+  resell: { en: 'We-Rise Resellers', af: 'We-Rise Resellers' },
 };
 
 const normalizeCampaign = (campaign) => ({

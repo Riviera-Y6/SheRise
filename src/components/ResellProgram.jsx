@@ -3,11 +3,11 @@ import { HiCash, HiCheck, HiInformationCircle, HiLink, HiPlus, HiShare, HiTag } 
 
 export default function ResellProgram({ t, lang, showToast }) {
   const [copied, setCopied] = useState(false);
-  const affiliateLink = `${window.location.origin}/?ref=risewithme`;
+  const resellLink = `${window.location.origin}/?ref=risewithme`;
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(affiliateLink);
+      await navigator.clipboard.writeText(resellLink);
       setCopied(true);
       showToast(t.copied);
       window.setTimeout(() => setCopied(false), 2000);
@@ -20,11 +20,11 @@ export default function ResellProgram({ t, lang, showToast }) {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'We-Rise',
+          title: 'We-Rise Resellers',
           text: lang === 'en'
-            ? 'Discover We-Rise through my affiliate link 💗'
-            : 'Ontdek We-Rise deur my affiliate-skakel 💗',
-          url: affiliateLink,
+            ? 'Discover We-Rise through my Reseller link 💗'
+            : 'Ontdek We-Rise deur my Reseller-skakel 💗',
+          url: resellLink,
         });
         return;
       } catch (error) {
@@ -38,108 +38,108 @@ export default function ResellProgram({ t, lang, showToast }) {
     ? [
         {
           icon: HiTag,
-          title: 'Start with the baseline price',
-          description: 'The current We-Rise or TrendShop price is the baseline. No part of this amount is paid to the affiliate.',
+          title: 'Buy at the baseline price',
+          description: 'The current We-Rise or TrendShop product price is the starting baseline for the Reseller.',
+        },
+        {
+          icon: HiShare,
+          title: 'Own it and resell it',
+          description: 'The Reseller purchases the product, takes ownership of it and can sell it repeatedly under the applicable Reseller terms.',
         },
         {
           icon: HiPlus,
-          title: 'Add your own amount',
-          description: 'The affiliate chooses the amount she wants to add above the baseline price as her margin.',
-        },
-        {
-          icon: HiCash,
-          title: 'Your added amount is your margin',
-          description: 'The customer pays the baseline price plus the clearly agreed added amount. Only the added amount represents the affiliate’s earnings.',
+          title: 'Add your own profit amount',
+          description: 'The Reseller adds her chosen amount above the baseline when setting her customer price. That amount is her profit—not commission.',
         },
       ]
     : [
         {
           icon: HiTag,
-          title: 'Begin by die basisprys',
-          description: 'Die huidige We-Rise- of TrendShop-prys is die basisprys. Geen deel van hierdie bedrag word aan die affiliate betaal nie.',
+          title: 'Koop teen die basisprys',
+          description: 'Die huidige We-Rise- of TrendShop-produkprys is die begin-basisprys vir die Reseller.',
+        },
+        {
+          icon: HiShare,
+          title: 'Besit dit en herverkoop dit',
+          description: 'Die Reseller koop die produk, neem eienaarskap daarvan en kan dit herhaaldelik volgens die toepaslike Reseller-voorwaardes verkoop.',
         },
         {
           icon: HiPlus,
-          title: 'Voeg jou eie bedrag by',
-          description: 'Die affiliate kies self watter bedrag sy bo-op die basisprys wil voeg as haar winsmarge.',
-        },
-        {
-          icon: HiCash,
-          title: 'Jou bygevoegde bedrag is jou winsmarge',
-          description: 'Die kliënt betaal die basisprys plus die duidelik ooreengekome ekstra bedrag. Slegs die bygevoegde bedrag verteenwoordig die affiliate se verdienste.',
+          title: 'Voeg jou eie winsbedrag by',
+          description: 'Die Reseller voeg haar gekose bedrag bo-op die basisprys wanneer sy haar kliëntprys bepaal. Daardie bedrag is haar wins—nie kommissie nie.',
         },
       ];
 
   return (
-    <section className="affiliate-page fade-in">
-      <header className="affiliate-hero">
-        <div className="affiliate-hero-icon"><HiLink /></div>
-        <div className="eyebrow">WE-RISE AFFILIATE</div>
-        <h2 className="section-title">{lang === 'en' ? 'Share the link. Set your margin.' : 'Deel die skakel. Bepaal jou winsmarge.'}</h2>
+    <section className="reseller-page fade-in">
+      <header className="reseller-hero">
+        <div className="reseller-hero-icon"><HiCash /></div>
+        <div className="eyebrow">WE-RISE RESELLERS</div>
+        <h2 className="section-title">{lang === 'en' ? 'Own it. Price it. Resell it.' : 'Besit dit. Prys dit. Herverkoop dit.'}</h2>
         <p className="section-subtitle">{lang === 'en'
-          ? 'A simple affiliate concept without a fixed commission percentage.'
-          : '’n Eenvoudige affiliate-konsep sonder ’n vaste kommissiepersentasie.'}</p>
+          ? 'Purchase a product, take ownership and build your own profit through repeated sales. This is not a commission model.'
+          : 'Koop ’n produk, neem eienaarskap en bou jou eie wins deur herhaalde verkope. Dit is nie ’n kommissiemodel nie.'}</p>
       </header>
 
-      <article className="card affiliate-link-card">
-        <div className="affiliate-card-heading">
-          <div className="affiliate-card-icon"><HiLink /></div>
+      <article className="card reseller-link-card">
+        <div className="reseller-card-heading">
+          <div className="reseller-card-icon"><HiLink /></div>
           <div>
-            <h3>{lang === 'en' ? 'Your affiliate link' : 'Jou affiliate-skakel'}</h3>
-            <p>{lang === 'en' ? 'Copy or share this link when introducing someone to We-Rise.' : 'Kopieer of deel hierdie skakel wanneer jy iemand aan We-Rise bekendstel.'}</p>
+            <h3>{lang === 'en' ? 'Your Resell link' : 'Jou Resell-skakel'}</h3>
+            <p>{lang === 'en' ? 'Copy or share your link when presenting the product to a customer.' : 'Kopieer of deel jou skakel wanneer jy die produk aan ’n kliënt bekendstel.'}</p>
           </div>
         </div>
 
-        <div className="referral-box affiliate-referral-box">
+        <div className="referral-box reseller-referral-box">
           <HiLink aria-hidden="true" />
-          <input aria-label={t.yourLink} type="text" value={affiliateLink} readOnly />
+          <input aria-label={t.yourLink} type="text" value={resellLink} readOnly />
           <button className="btn btn-primary btn-sm" onClick={handleCopy}>
             {copied ? <HiCheck /> : <HiLink />} {copied ? t.copied : t.copyLink}
           </button>
         </div>
 
         <button className="btn btn-primary btn-full" onClick={handleShare}>
-          <HiShare /> {lang === 'en' ? 'Share affiliate link' : 'Deel affiliate-skakel'}
+          <HiShare /> {lang === 'en' ? 'Share your Reseller link' : 'Deel jou Reseller-skakel'}
         </button>
       </article>
 
-      <article className="card affiliate-model-card">
-        <div className="eyebrow">{lang === 'en' ? 'HOW THE PRICING WORKS' : 'HOE DIE PRYS WERK'}</div>
-        <h3>{lang === 'en' ? 'The baseline + your amount' : 'Die basisprys + jou bedrag'}</h3>
-        <p className="affiliate-model-intro">{lang === 'en'
-          ? 'The existing listed price remains the baseline. If an affiliate wants to earn from a sale, she adds her chosen amount on top of that price.'
-          : 'Die bestaande geadverteerde prys bly die basisprys. Indien ’n affiliate uit ’n verkoop wil verdien, voeg sy haar gekose bedrag bo-op daardie prys.'}</p>
+      <article className="card reseller-model-card">
+        <div className="eyebrow">{lang === 'en' ? 'HOW RESELLING WORKS' : 'HOE HERVERKOOP WERK'}</div>
+        <h3>{lang === 'en' ? 'The baseline + your profit amount' : 'Die basisprys + jou winsbedrag'}</h3>
+        <p className="reseller-model-intro">{lang === 'en'
+          ? 'The existing product price remains the baseline. A Reseller does not earn a percentage of that amount—she adds her chosen profit above it when setting her selling price.'
+          : 'Die bestaande produkprys bly die basisprys. ’n Reseller verdien nie ’n persentasie van daardie bedrag nie—sy voeg haar gekose wins bo-op wanneer sy haar verkoopprys bepaal.'}</p>
 
-        <div className="affiliate-steps">
+        <div className="reseller-steps">
           {steps.map(({ icon: Icon, title, description }, index) => (
-            <div className="affiliate-step" key={title}>
-              <div className="affiliate-step-number">{index + 1}</div>
-              <div className="affiliate-step-icon"><Icon /></div>
+            <div className="reseller-step" key={title}>
+              <div className="reseller-step-number">{index + 1}</div>
+              <div className="reseller-step-icon"><Icon /></div>
               <div><strong>{title}</strong><p>{description}</p></div>
             </div>
           ))}
         </div>
 
-        <div className="affiliate-example">
+        <div className="reseller-example">
           <span>{lang === 'en' ? 'Illustrative example only' : 'Slegs ’n verduidelikende voorbeeld'}</span>
-          <div className="affiliate-equation">
+          <div className="reseller-equation">
             <div><small>{lang === 'en' ? 'Baseline' : 'Basisprys'}</small><strong>R100</strong></div>
             <b>+</b>
-            <div><small>{lang === 'en' ? 'Your amount' : 'Jou bedrag'}</small><strong>R40</strong></div>
+            <div><small>{lang === 'en' ? 'Your profit' : 'Jou wins'}</small><strong>R40</strong></div>
             <b>=</b>
-            <div className="affiliate-total"><small>{lang === 'en' ? 'Customer price' : 'Kliëntprys'}</small><strong>R140</strong></div>
+            <div className="reseller-total"><small>{lang === 'en' ? 'Selling price' : 'Verkoopprys'}</small><strong>R140</strong></div>
           </div>
           <p>{lang === 'en'
-            ? 'The R100 baseline remains payable to We-Rise/TrendShop. The R40 added amount is the affiliate’s margin.'
-            : 'Die R100-basisprys bly aan We-Rise/TrendShop betaalbaar. Die bygevoegde R40 is die affiliate se winsmarge.'}</p>
+            ? 'The R100 product price is the baseline. The Reseller sets the selling price at R140, with R40 added as her chosen profit—not commission.'
+            : 'Die R100-produkprys is die basisprys. Die Reseller stel die verkoopprys op R140, met R40 wat as haar gekose wins bygevoeg word—nie kommissie nie.'}</p>
         </div>
       </article>
 
-      <div className="affiliate-information-note">
+      <div className="reseller-information-note">
         <HiInformationCircle />
         <p>{lang === 'en'
-          ? 'At this stage We-Rise provides the affiliate link and explains the pricing concept. The app does not yet calculate, collect or pay affiliate margins automatically. The final customer price must always be communicated clearly before a sale.'
-          : 'Op hierdie stadium verskaf We-Rise die affiliate-skakel en verduidelik die pryskonsep. Die toepassing bereken, ontvang of betaal nog nie affiliate-winsmarges outomaties uit nie. Die finale kliëntprys moet altyd duidelik voor ’n verkoop gekommunikeer word.'}</p>
+          ? 'At this stage We-Rise provides the Resell link and explains the Reseller model. The app does not yet process Reseller sales automatically. The final selling price must always be communicated clearly to the customer before a sale.'
+          : 'Op hierdie stadium verskaf We-Rise die Resell-skakel en verduidelik die Reseller-model. Die toepassing verwerk nog nie Reseller-verkope outomaties nie. Die finale verkoopprys moet altyd voor ’n verkoop duidelik aan die kliënt gekommunikeer word.'}</p>
       </div>
     </section>
   );
