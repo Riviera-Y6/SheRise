@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HiSparkles, HiHeart, HiChat, HiCurrencyDollar, HiDownload, HiUserAdd } from 'react-icons/hi';
+import BrandMark from './BrandMark';
 
 export default function Home({ t, lang, onNavigate, userName, campaigns = [], isAuthenticated = false, onLogin, onRegister }) {
   const [affirmationIndex, setAffirmationIndex] = useState(0);
@@ -31,12 +32,15 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
 
   return (
     <div className="fade-in">
+      <div className="home-brand-seal" aria-label="We-Rise — Rise Together. Rise Forever.">
+        <BrandMark variant="seal" />
+      </div>
       <div className="welcome-hero">
         <h2>{isAuthenticated && userName ? t.welcomeBackName.replace('{name}', userName) : (lang === 'en' ? 'Welcome to We-Rise' : 'Welkom by We-Rise')}</h2>
         <p>{isAuthenticated ? t.joinMovement : (lang === 'en' ? 'Explore the movement freely. Create an account when you are ready to use your personal features.' : 'Verken die beweging vrylik. Skep ’n rekening wanneer jy gereed is om jou persoonlike funksies te gebruik.')}</p>
       </div>
 
-      <div className="tagline">{t.tagline}</div>
+      <div className="tagline tagline-under-seal">{t.tagline}</div>
 
       {!isAuthenticated && (
         <div className="guest-home-card">

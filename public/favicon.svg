@@ -1,1 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FF69B4"/><stop offset="100%" stop-color="#FF1493"/></linearGradient></defs><circle cx="50" cy="50" r="45" fill="url(#g)"/><text x="50" y="62" font-family="serif" font-size="36" font-weight="bold" fill="white" text-anchor="middle">W</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="We-Rise">
+  <defs>
+    <linearGradient id="ring" x1="10" y1="8" x2="91" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffd1e7"/><stop offset="0.35" stop-color="#ff69b4"/><stop offset="0.72" stop-color="#ff1493"/><stop offset="1" stop-color="#a96fff"/>
+    </linearGradient>
+    <radialGradient id="disc" cx="50%" cy="38%" r="70%"><stop offset="0" stop-color="#3a2955"/><stop offset="1" stop-color="#171529"/></radialGradient>
+  </defs>
+  <circle cx="50" cy="50" r="47" fill="url(#disc)" stroke="url(#ring)" stroke-width="5"/>
+  <circle cx="50" cy="50" r="39" fill="none" stroke="#ffb6d9" stroke-opacity="0.55" stroke-width="1.4"/>
+  <path d="M50 14 L52.2 19 L57.5 21.2 L52.2 23.4 L50 28.5 L47.8 23.4 L42.5 21.2 L47.8 19 Z" fill="#ffb6d9"/>
+  <path d="M24 61 C18 49 21 37 30 29 M76 61 C82 49 79 37 70 29" fill="none" stroke="url(#ring)" stroke-width="2.2" stroke-linecap="round" opacity="0.78"/>
+  <text x="50" y="69" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="54" font-weight="700" font-style="italic" fill="#fff1f8" letter-spacing="-5">W</text>
+  <path d="M32 75 C42 78 58 78 68 75" fill="none" stroke="url(#ring)" stroke-width="2" stroke-linecap="round"/>
+</svg>

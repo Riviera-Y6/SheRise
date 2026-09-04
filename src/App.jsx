@@ -23,6 +23,7 @@ import FeatureLock from './components/FeatureLock';
 import Manifesto from './components/Manifesto';
 import MembershipLock from './components/MembershipLock';
 import Billing from './components/Billing';
+import BrandMark from './components/BrandMark';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home', public: true },
@@ -288,7 +289,7 @@ export default function App() {
     <div className="app-container">
       <header className="app-header">
         <div className="app-header-left">
-          <div className="app-logo-icon">W</div>
+          <BrandMark variant="compact" className="app-logo-icon" />
           <span className="app-logo">We-Rise</span>
         </div>
         <div className="app-header-actions">

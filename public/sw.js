@@ -1,4 +1,4 @@
-const CACHE = 'we-rise-shell-v1';
+const CACHE = 'we-rise-shell-v2';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
