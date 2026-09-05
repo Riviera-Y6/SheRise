@@ -63,15 +63,15 @@ function getCommunityPolicyViolation(value, lang) {
 }
 
 
-function CommunityAvatar({ name, small = false }) {
+function CommunityAvatar({ name, avatarUrl = '', small = false }) {
   return (
     <div className={`community-avatar ${small ? 'community-avatar-small' : ''}`} aria-hidden="true">
-      {initials(name)}
+      {avatarUrl ? <img src={avatarUrl} alt="" /> : initials(name)}
     </div>
   );
 }
 
-export default function Community({ t, lang, showToast, userName, memberKey, isAuthenticated = false, onRequireAuth, onConversationChange }) {
+export default function Community({ t, lang, showToast, userName, memberKey, profilePhotoUrl = '', isAuthenticated = false, onRequireAuth, onConversationChange }) {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -234,7 +234,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
 
         <article className="community-post-card community-post-card-featured">
           <div className="community-post-header">
-            <CommunityAvatar name={selectedTopic.author} />
+            <CommunityAvatar name={selectedTopic.author} avatarUrl={selectedTopic.avatar_url} />
             <div className="community-author-block">
               <div className="community-author-line">
                 <strong>{selectedTopic.author || authorName}</strong>
@@ -289,7 +289,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
             <div className="community-comment-list">
               {comments.map(comment => (
                 <div key={comment.id} className="community-comment">
-                  <CommunityAvatar name={comment.author} small />
+                  <CommunityAvatar name={comment.author} avatarUrl={comment.avatar_url} small />
                   <div className="community-comment-bubble">
                     <div className="community-comment-meta">
                       <strong>{comment.author || authorName}</strong>
@@ -380,7 +380,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
 
       <section className="community-composer-card">
         <div className="community-composer-header">
-          <CommunityAvatar name={authorName} />
+          <CommunityAvatar name={authorName} avatarUrl={profilePhotoUrl} />
           <div>
             <strong>{userName || (lang === 'en' ? 'We-Rise Lady' : 'We-Rise Lady')}</strong>
             <span>{lang === 'en' ? 'Share with the community' : 'Deel met die gemeenskap'}</span>
@@ -456,7 +456,7 @@ export default function Community({ t, lang, showToast, userName, memberKey, isA
               <article key={topic.id} className="community-post-card">
                 <button type="button" className="community-post-main" onClick={() => setSelectedTopicId(topic.id)}>
                   <div className="community-post-header">
-                    <CommunityAvatar name={topic.author} />
+                    <CommunityAvatar name={topic.author} avatarUrl={topic.avatar_url} />
                     <div className="community-author-block">
                       <div className="community-author-line">
                         <strong>{topic.author || authorName}</strong>

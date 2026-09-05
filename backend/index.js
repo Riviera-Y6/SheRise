@@ -3,6 +3,8 @@ import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import nodemailer from 'nodemailer';
+import sharp from 'sharp';
 import {
   createPayFastSignature,
   parsePayFastBody,
@@ -24,7 +26,12 @@ const PREMIUM_PRIVATE_MESSAGE_CHARS = 2000;
 const MAX_MESSAGE_PAGE_SIZE = 30;
 const MAX_BACKMI_DOCUMENTS = 10;
 const MAX_BACKMI_DOCUMENT_SIZE = 5 * 1024 * 1024;
-const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, created_at, updated_at, last_seen_at';
+const MAX_PROFILE_PHOTO_SIZE = 8 * 1024 * 1024;
+const MAX_SUPPORT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
+const PROFILE_PHOTO_BUCKET = 'we-rise-profile-photos';
+const SUPPORT_ATTACHMENT_BUCKET = 'we-rise-support-attachments';
+const SUPPORT_CATEGORIES = new Set(['account', 'profile_photo', 'technical', 'membership_payment', 'backmi', 'community_messages', 'safety', 'other']);
+const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -43,6 +50,15 @@ const API_PUBLIC_URL = String(process.env.API_PUBLIC_URL || '').trim().replace(/
 const PAYFAST_IP_ALLOWLIST = new Set(String(process.env.PAYFAST_IP_ALLOWLIST || '').split(',').map(value => value.trim()).filter(Boolean));
 const ADMIN_EMAILS = new Set(String(process.env.WE_RISE_ADMIN_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const BACKMI_REVIEWER_EMAILS = new Set(String(process.env.BACKMI_REVIEWER_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
+const SUPPORT_TO_EMAIL = String(process.env.SUPPORT_TO_EMAIL || 'request4.support@gmail.com').trim().toLowerCase();
+const SUPPORT_EMAIL_ENABLED = String(process.env.SUPPORT_EMAIL_ENABLED || '').trim().toLowerCase() === 'true';
+const SUPPORT_SMTP_HOST = String(process.env.SUPPORT_SMTP_HOST || 'smtp.gmail.com').trim();
+const SUPPORT_SMTP_PORT = Math.max(1, Number(process.env.SUPPORT_SMTP_PORT || 465));
+const SUPPORT_SMTP_SECURE = String(process.env.SUPPORT_SMTP_SECURE || 'true').trim().toLowerCase() === 'true';
+const SUPPORT_SMTP_USER = String(process.env.SUPPORT_SMTP_USER || '').trim();
+const SUPPORT_SMTP_APP_PASSWORD = String(process.env.SUPPORT_SMTP_APP_PASSWORD || '').trim();
+const SUPPORT_FROM_NAME = String(process.env.SUPPORT_FROM_NAME || 'We-Rise Support').trim().slice(0, 80);
+const SUPPORT_EMAIL_CONFIGURED = Boolean(SUPPORT_EMAIL_ENABLED && SUPPORT_TO_EMAIL && SUPPORT_SMTP_HOST && SUPPORT_SMTP_USER && SUPPORT_SMTP_APP_PASSWORD);
 const PAYFAST_CREDENTIALS_CONFIGURED = Boolean(PAYFAST_MERCHANT_ID && PAYFAST_MERCHANT_KEY && PAYFAST_PASSPHRASE);
 const PAYFAST_CONFIGURED = Boolean(PAYFAST_ENABLED && PAYFAST_CREDENTIALS_CONFIGURED);
 
@@ -131,7 +147,15 @@ function membershipSummary(profile) {
   };
 }
 
-function safeProfile(profile) {
+function profilePhotoRequired(profile) {
+  return Boolean(profile && (profile.role || 'member') === 'member' && !profile.avatar_path);
+}
+
+function canViewMemberPhotos(auth) {
+  return Boolean(auth?.user?.id && auth?.membership?.access_allowed && !profilePhotoRequired(auth.profile));
+}
+
+function safeProfile(profile, avatarUrl = null) {
   if (!profile) return null;
   return {
     member_key: profile.member_key,
@@ -140,10 +164,35 @@ function safeProfile(profile) {
     display_name: profile.display_name,
     plan: profile.plan,
     role: profile.role || 'member',
+    avatar_url: avatarUrl,
+    avatar_updated_at: profile.avatar_updated_at || null,
+    profile_photo_completed_at: profile.profile_photo_completed_at || null,
+    photo_required: profilePhotoRequired(profile),
     created_at: profile.created_at,
     updated_at: profile.updated_at,
     last_seen_at: profile.last_seen_at,
   };
+}
+
+async function signedAvatarUrl(path, expiresIn = 3600) {
+  const objectPath = String(path || '').trim();
+  if (!objectPath) return null;
+  const { data, error } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).createSignedUrl(objectPath, expiresIn);
+  if (error) {
+    console.error('Could not create a signed member photo URL:', error.message);
+    return null;
+  }
+  return data?.signedUrl || null;
+}
+
+async function safeProfileWithAvatar(profile) {
+  return safeProfile(profile, await signedAvatarUrl(profile?.avatar_path));
+}
+
+async function avatarUrlMap(memberRows) {
+  const rows = Array.isArray(memberRows) ? memberRows : [];
+  const pairs = await Promise.all(rows.map(async row => [row.member_key, await signedAvatarUrl(row.avatar_path)]));
+  return new Map(pairs.filter(([, url]) => Boolean(url)));
 }
 
 async function getPaymentSettings() {
@@ -334,6 +383,15 @@ async function authContext(c, required = true) {
 async function memberAccessContext(c) {
   const auth = await authContext(c);
   if (auth.response) return auth;
+  if (profilePhotoRequired(auth.profile)) {
+    return {
+      ...auth,
+      response: c.json({
+        error: 'Add your required profile photo before using this We-Rise feature.',
+        code: 'PROFILE_PHOTO_REQUIRED',
+      }, 428),
+    };
+  }
   if (!auth.membership.access_allowed) {
     return {
       ...auth,
@@ -380,6 +438,109 @@ async function sendTwilioSms(to, body) {
   try { data = await response.json(); } catch {}
   if (!response.ok) return { accepted: false, error: data?.message || `SMS provider returned ${response.status}` };
   return { accepted: true, provider_id: data?.sid || null, status: data?.status || 'queued' };
+}
+
+async function profilePhotoJpeg(file) {
+  if (!file || typeof file.arrayBuffer !== 'function') throw new Error('Choose a profile photo to continue.');
+  if (!String(file.type || '').startsWith('image/')) throw new Error('The selected profile photo must be an image.');
+  if (Number(file.size || 0) < 1 || Number(file.size || 0) > MAX_PROFILE_PHOTO_SIZE) {
+    throw new Error('Profile photos may not be larger than 8 MB.');
+  }
+  const input = Buffer.from(await file.arrayBuffer());
+  try {
+    return await sharp(input, { failOn: 'error', limitInputPixels: 40000000 })
+      .rotate()
+      .resize(512, 512, { fit: 'cover', position: 'attention' })
+      .jpeg({ quality: 86, mozjpeg: true })
+      .toBuffer();
+  } catch {
+    throw new Error('We could not read that image. Use a JPG, PNG or WebP photo.');
+  }
+}
+
+async function supportAttachmentJpeg(file) {
+  if (!file || typeof file.arrayBuffer !== 'function' || Number(file.size || 0) < 1) return null;
+  if (!String(file.type || '').startsWith('image/')) throw new Error('The support attachment must be an image.');
+  if (Number(file.size || 0) > MAX_SUPPORT_ATTACHMENT_SIZE) throw new Error('Support screenshots may not be larger than 8 MB.');
+  const input = Buffer.from(await file.arrayBuffer());
+  try {
+    return await sharp(input, { failOn: 'error', limitInputPixels: 50000000 })
+      .rotate()
+      .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 84, mozjpeg: true })
+      .toBuffer();
+  } catch {
+    throw new Error('We could not read that screenshot. Use a JPG, PNG or WebP image.');
+  }
+}
+
+let supportTransporter = null;
+function getSupportTransporter() {
+  if (!SUPPORT_EMAIL_CONFIGURED) return null;
+  if (!supportTransporter) {
+    supportTransporter = nodemailer.createTransport({
+      host: SUPPORT_SMTP_HOST,
+      port: SUPPORT_SMTP_PORT,
+      secure: SUPPORT_SMTP_SECURE,
+      auth: { user: SUPPORT_SMTP_USER, pass: SUPPORT_SMTP_APP_PASSWORD },
+    });
+  }
+  return supportTransporter;
+}
+
+async function emailSupportTicket(ticket, attachmentBuffer = null) {
+  const transporter = getSupportTransporter();
+  if (!transporter) return { sent: false, status: 'disabled', providerId: null, error: 'Support email is not configured.' };
+
+  const body = [
+    'A new We-Rise support request was received.',
+    '',
+    `Reference: ${ticket.ticket_code}`,
+    `Date: ${ticket.created_at || new Date().toISOString()}`,
+    `Name: ${ticket.requester_name}`,
+    `Email: ${ticket.requester_email}`,
+    `Member ID: ${ticket.member_key || 'Guest / not logged in'}`,
+    `Category: ${ticket.category}`,
+    `Subject: ${ticket.subject}`,
+    `Page: ${ticket.page_context || 'Not supplied'}`,
+    '',
+    'Message:',
+    ticket.message,
+    '',
+    `Reply directly to this email to answer ${ticket.requester_name}.`,
+  ].join('\n');
+
+  try {
+    const result = await transporter.sendMail({
+      from: `"${SUPPORT_FROM_NAME.replace(/["\r\n]/g, '')}" <${SUPPORT_SMTP_USER}>`,
+      to: SUPPORT_TO_EMAIL,
+      replyTo: ticket.requester_email,
+      subject: `[We-Rise ${ticket.ticket_code}] ${ticket.subject}`,
+      text: body,
+      attachments: attachmentBuffer ? [{ filename: `${ticket.ticket_code}-screenshot.jpg`, content: attachmentBuffer, contentType: 'image/jpeg' }] : [],
+    });
+    return { sent: true, status: 'sent', providerId: result?.messageId || null, error: null };
+  } catch (error) {
+    console.error(`Support email ${ticket.ticket_code} failed:`, error?.message || error);
+    return { sent: false, status: 'failed', providerId: null, error: String(error?.message || error || 'Email delivery failed.').slice(0, 500) };
+  }
+}
+
+const supportIpAttempts = new Map();
+function supportRequestAllowed(c) {
+  const ip = String(c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown').split(',')[0].trim().slice(0, 80);
+  const now = Date.now();
+  const cutoff = now - 60 * 60 * 1000;
+  const recent = (supportIpAttempts.get(ip) || []).filter(value => value >= cutoff);
+  if (recent.length >= 8) return false;
+  recent.push(now);
+  supportIpAttempts.set(ip, recent);
+  if (supportIpAttempts.size > 1000) {
+    for (const [key, values] of supportIpAttempts.entries()) {
+      if (!values.some(value => value >= cutoff)) supportIpAttempts.delete(key);
+    }
+  }
+  return true;
 }
 
 function formatContribution(row, memberNames = new Map()) {
@@ -447,10 +608,153 @@ app.get('/api/auth/profile', async (c) => {
     if (auth.response) return auth.response;
     return c.json({
       user: { id: auth.user.id, email: auth.user.email || null },
-      profile: safeProfile(auth.profile),
+      profile: await safeProfileWithAvatar(auth.profile),
       membership: auth.membership,
     });
   } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/profile/photo', async (c) => {
+  try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+
+    const form = await c.req.formData();
+    const photo = form.get('photo');
+    const jpeg = await profilePhotoJpeg(photo);
+    const objectPath = `members/${auth.memberKey}/avatar-${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).upload(objectPath, jpeg, {
+      contentType: 'image/jpeg',
+      cacheControl: '3600',
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+
+    const now = new Date().toISOString();
+    const oldPath = auth.profile.avatar_path;
+    const { data: updated, error: updateError } = await supabase.from('member_profiles').update({
+      avatar_path: objectPath,
+      avatar_updated_at: now,
+      profile_photo_completed_at: auth.profile.profile_photo_completed_at || now,
+      updated_at: now,
+    }).eq('member_key', auth.memberKey).select(PROFILE_COLUMNS).single();
+
+    if (updateError) {
+      await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([objectPath]);
+      throw updateError;
+    }
+
+    if (oldPath && oldPath !== objectPath) {
+      const { error: removeError } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([oldPath]);
+      if (removeError) console.error('Could not remove the previous profile photo:', removeError.message);
+    }
+
+    return c.json({ profile: await safeProfileWithAvatar(updated), success: true });
+  } catch (error) {
+    const known = String(error?.message || '');
+    if (known.includes('Choose a profile photo') || known.includes('Profile photos') || known.includes('selected profile') || known.includes('could not read')) {
+      return c.json({ error: known }, 400);
+    }
+    return fail(c, error);
+  }
+});
+
+app.get('/api/support/config', (c) => c.json({
+  available: true,
+  email_delivery_ready: SUPPORT_EMAIL_CONFIGURED,
+  attachments_allowed: true,
+}));
+
+app.post('/api/support/tickets', async (c) => {
+  let uploadedPath = null;
+  try {
+    if (!supportRequestAllowed(c)) return c.json({ error: 'Too many support requests were sent from this connection. Please try again later.' }, 429);
+
+    const form = await c.req.formData();
+    if (String(form.get('website') || '').trim()) {
+      return c.json({ success: true, ticket_code: 'SUPPORT-RECEIVED', email_sent: true }, 201);
+    }
+
+    const auth = await authContext(c, false);
+    const requesterName = auth?.profile?.display_name
+      ? cleanName(auth.profile.display_name)
+      : cleanName(form.get('name'), '');
+    const requesterEmail = String(auth?.user?.email || form.get('email') || '').trim().toLowerCase().slice(0, 320);
+    const category = String(form.get('category') || '').trim();
+    const subject = String(form.get('subject') || '').trim().replace(/[\r\n]+/g, ' ').slice(0, 140);
+    const message = String(form.get('message') || '').trim().slice(0, 4000);
+    const pageContext = String(form.get('page_context') || '').trim().slice(0, 240);
+
+    if (!requesterName || requesterName.length > 80) return c.json({ error: 'Enter your name.' }, 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requesterEmail)) return c.json({ error: 'Enter a valid email address.' }, 400);
+    if (!SUPPORT_CATEGORIES.has(category)) return c.json({ error: 'Choose the type of problem.' }, 400);
+    if (subject.length < 4) return c.json({ error: 'Enter a short subject for the problem.' }, 400);
+    if (message.length < 10) return c.json({ error: 'Tell us a little more about the problem.' }, 400);
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count, error: countError } = await supabase.from('support_tickets')
+      .select('id', { count: 'exact', head: true })
+      .eq('requester_email', requesterEmail)
+      .gte('created_at', oneHourAgo);
+    if (countError) throw countError;
+    if (Number(count || 0) >= 5) return c.json({ error: 'Too many support requests were sent for this email address. Please try again later.' }, 429);
+
+    const attachment = form.get('attachment');
+    const attachmentBuffer = await supportAttachmentJpeg(attachment);
+    const { data: ticketCode, error: codeError } = await supabase.rpc('next_support_ticket_code');
+    if (codeError) throw codeError;
+
+    if (attachmentBuffer) {
+      uploadedPath = `tickets/${ticketCode}/screenshot.jpg`;
+      const { error: uploadError } = await supabase.storage.from(SUPPORT_ATTACHMENT_BUCKET).upload(uploadedPath, attachmentBuffer, {
+        contentType: 'image/jpeg',
+        cacheControl: '3600',
+        upsert: false,
+      });
+      if (uploadError) throw uploadError;
+    }
+
+    const { data: ticket, error: insertError } = await supabase.from('support_tickets').insert({
+      ticket_code: ticketCode,
+      member_key: auth?.memberKey || null,
+      requester_name: requesterName,
+      requester_email: requesterEmail,
+      category,
+      subject,
+      message,
+      attachment_path: uploadedPath,
+      page_context: pageContext || null,
+      email_status: SUPPORT_EMAIL_CONFIGURED ? 'pending' : 'disabled',
+    }).select('*').single();
+    if (insertError) throw insertError;
+
+    const delivery = await emailSupportTicket(ticket, attachmentBuffer);
+    const { error: deliveryUpdateError } = await supabase.from('support_tickets').update({
+      email_status: delivery.status,
+      email_provider_id: delivery.providerId,
+      email_error: delivery.error,
+      updated_at: new Date().toISOString(),
+    }).eq('id', ticket.id);
+    if (deliveryUpdateError) console.error('Could not update support email status:', deliveryUpdateError.message);
+
+    return c.json({
+      success: true,
+      ticket_code: ticket.ticket_code,
+      email_sent: delivery.sent,
+      email_delivery_ready: SUPPORT_EMAIL_CONFIGURED,
+    }, 201);
+  } catch (error) {
+    if (uploadedPath) {
+      const { error: removeError } = await supabase.storage.from(SUPPORT_ATTACHMENT_BUCKET).remove([uploadedPath]);
+      if (removeError) console.error('Could not remove unused support attachment:', removeError.message);
+    }
+    const known = String(error?.message || '');
+    if (known.includes('support attachment') || known.includes('Support screenshots') || known.includes('could not read that screenshot')) {
+      return c.json({ error: known }, 400);
+    }
     return fail(c, error);
   }
 });
@@ -479,7 +783,7 @@ app.get('/api/billing/status', async (c) => {
     if (paymentError) throw paymentError;
     return c.json({
       membership: auth.membership,
-      profile: safeProfile(auth.profile),
+      profile: await safeProfileWithAvatar(auth.profile),
       settings: publicPaymentSettings(settings),
       admin_settings: auth.profile.role === 'admin' ? {
         ...publicPaymentSettings(settings),
@@ -503,6 +807,12 @@ app.post('/api/billing/membership/checkout', async (c) => {
   try {
     const auth = await authContext(c);
     if (auth.response) return auth.response;
+    if (profilePhotoRequired(auth.profile)) {
+      return c.json({
+        error: 'Add your required profile photo before completing We-Rise membership.',
+        code: 'PROFILE_PHOTO_REQUIRED',
+      }, 428);
+    }
     const membership = auth.membership;
     if (membership.status === 'active') return c.json({ error: 'Your We-Rise membership is already active.', code: 'ALREADY_ACTIVE' }, 409);
     if (membership.trial_active) {
@@ -1113,13 +1423,39 @@ app.get('/api/topics', async (c) => {
     const supporterKey = auth?.memberKey || '';
     const { data, error } = await supabase.rpc('get_community_topics', { p_supporter_key: supporterKey });
     if (error) throw error;
-    return c.json((data || []).map(topic => ({
+    const topics = (data || []).map(topic => ({
       ...topic,
       id: Number(topic.id),
       replies: Number(topic.replies || 0),
       supports: Number(topic.supports || 0),
       supported: Boolean(topic.supported),
-    })));
+      avatar_url: null,
+    }));
+
+    if (canViewMemberPhotos(auth) && topics.length) {
+      const topicIds = topics.map(topic => topic.id);
+      const { data: authors, error: authorError } = await supabase.from('community_topics')
+        .select('id, author_user_id')
+        .in('id', topicIds)
+        .not('author_user_id', 'is', null);
+      if (authorError) throw authorError;
+      const userIds = [...new Set((authors || []).map(row => row.author_user_id).filter(Boolean))];
+      if (userIds.length) {
+        const { data: profiles, error: profileError } = await supabase.from('member_profiles')
+          .select('member_key, auth_user_id, avatar_path')
+          .in('auth_user_id', userIds);
+        if (profileError) throw profileError;
+        const avatarByMember = await avatarUrlMap(profiles || []);
+        const memberByUser = new Map((profiles || []).map(row => [row.auth_user_id, row.member_key]));
+        const userByTopic = new Map((authors || []).map(row => [Number(row.id), row.author_user_id]));
+        for (const topic of topics) {
+          const member = memberByUser.get(userByTopic.get(topic.id));
+          topic.avatar_url = avatarByMember.get(member) || null;
+        }
+      }
+    }
+
+    return c.json(topics);
   } catch (error) {
     return fail(c, error);
   }
@@ -1149,14 +1485,31 @@ app.post('/api/topics', async (c) => {
 
 app.get('/api/topics/:id/comments', async (c) => {
   try {
+    const auth = await authContext(c, false);
     const topicId = Number(c.req.param('id'));
     if (!Number.isInteger(topicId) || topicId <= 0) return c.json({ error: 'Invalid topic.' }, 400);
     const { data: topic, error: topicError } = await supabase.from('community_topics').select('id').eq('id', topicId).maybeSingle();
     if (topicError) throw topicError;
     if (!topic) return c.json({ error: 'Conversation not found.' }, 404);
-    const { data, error } = await supabase.from('community_comments').select('id, topic_id, author, content, created_at').eq('topic_id', topicId).order('created_at', { ascending: true }).order('id', { ascending: true });
+    const { data, error } = await supabase.from('community_comments').select('id, topic_id, author, author_user_id, content, created_at').eq('topic_id', topicId).order('created_at', { ascending: true }).order('id', { ascending: true });
     if (error) throw error;
-    return c.json(data || []);
+    const comments = data || [];
+    let avatarByUser = new Map();
+    if (canViewMemberPhotos(auth)) {
+      const userIds = [...new Set(comments.map(row => row.author_user_id).filter(Boolean))];
+      if (userIds.length) {
+        const { data: profiles, error: profileError } = await supabase.from('member_profiles')
+          .select('member_key, auth_user_id, avatar_path')
+          .in('auth_user_id', userIds);
+        if (profileError) throw profileError;
+        const avatarByMember = await avatarUrlMap(profiles || []);
+        avatarByUser = new Map((profiles || []).map(row => [row.auth_user_id, avatarByMember.get(row.member_key) || null]));
+      }
+    }
+    return c.json(comments.map(({ author_user_id: authorUserId, ...comment }) => ({
+      ...comment,
+      avatar_url: avatarByUser.get(authorUserId) || null,
+    })));
   } catch (error) {
     return fail(c, error);
   }
@@ -1231,14 +1584,18 @@ app.get('/api/members', async (c) => {
     const auth = await memberAccessContext(c);
     if (auth.response) return auth.response;
     const { data, error } = await supabase.from('member_profiles')
-      .select('member_key, display_name, plan, last_seen_at')
+      .select('member_key, display_name, plan, last_seen_at, avatar_path')
       .neq('member_key', auth.memberKey)
       .eq('role', 'member')
       .not('auth_user_id', 'is', null)
       .order('display_name', { ascending: true })
       .limit(100);
     if (error) throw error;
-    return c.json(data || []);
+    const avatarByMember = await avatarUrlMap(data || []);
+    return c.json((data || []).map(({ avatar_path, ...member }) => ({
+      ...member,
+      avatar_url: avatarByMember.get(member.member_key) || null,
+    })));
   } catch (error) {
     return fail(c, error);
   }
@@ -1284,7 +1641,22 @@ app.get('/api/inbox', async (c) => {
     if (auth.response) return auth.response;
     const { data, error } = await supabase.rpc('get_member_inbox', { p_member_key: auth.memberKey });
     if (error) throw error;
-    return c.json((data || []).map(item => ({ ...item, id: Number(item.id), unread_count: Number(item.unread_count || 0) })));
+    const items = data || [];
+    const memberKeys = [...new Set(items.map(item => item.other_member_key).filter(Boolean))];
+    let avatarByMember = new Map();
+    if (memberKeys.length) {
+      const { data: profiles, error: profileError } = await supabase.from('member_profiles')
+        .select('member_key, avatar_path')
+        .in('member_key', memberKeys);
+      if (profileError) throw profileError;
+      avatarByMember = await avatarUrlMap(profiles || []);
+    }
+    return c.json(items.map(item => ({
+      ...item,
+      id: Number(item.id),
+      unread_count: Number(item.unread_count || 0),
+      avatar_url: avatarByMember.get(item.other_member_key) || null,
+    })));
   } catch (error) {
     return fail(c, error);
   }

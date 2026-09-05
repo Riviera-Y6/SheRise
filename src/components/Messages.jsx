@@ -43,8 +43,8 @@ function formatMessageTime(value, lang) {
   return date.toLocaleTimeString(lang === 'en' ? 'en-ZA' : 'af-ZA', { hour: '2-digit', minute: '2-digit' });
 }
 
-function Avatar({ name, size = 'normal' }) {
-  return <div className={`messages-avatar messages-avatar-${size}`}>{initials(name)}</div>;
+function Avatar({ name, avatarUrl = '', size = 'normal' }) {
+  return <div className={`messages-avatar messages-avatar-${size}`}>{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(name)}</div>;
 }
 
 function mergeMessages(current, incoming) {
@@ -274,6 +274,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
         ...conversation,
         other_member_key: member.member_key,
         other_name: member.display_name,
+        avatar_url: member.avatar_url || null,
       });
     } catch (error) {
       showToast(error?.message || strings.startError);
@@ -332,7 +333,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
           >
             <HiArrowLeft />
           </button>
-          <Avatar name={otherName} size="small" />
+          <Avatar name={otherName} avatarUrl={selectedConversation.avatar_url} size="small" />
           <div className="messages-chat-person">
             <strong>{otherName}</strong>
             <span>{strings.directChat}</span>
@@ -371,7 +372,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
                 const mine = message.sender_key === memberKey;
                 return (
                   <div key={message.id} className={`messages-bubble-row ${mine ? 'is-mine' : 'is-theirs'}`}>
-                    {!mine && <Avatar name={otherName} size="tiny" />}
+                    {!mine && <Avatar name={otherName} avatarUrl={selectedConversation.avatar_url} size="tiny" />}
                     <div className={`messages-bubble ${mine ? 'messages-bubble-mine' : 'messages-bubble-theirs'}`}>
                       <p>{message.content}</p>
                       <div className="messages-bubble-meta">
@@ -482,7 +483,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
                   onClick={() => startConversation(member)}
                   disabled={startingWith === member.member_key}
                 >
-                  <Avatar name={member.display_name} />
+                  <Avatar name={member.display_name} avatarUrl={member.avatar_url} />
                   <div className="messages-member-copy">
                     <strong>{member.display_name}</strong>
                     <span>We-Rise Lady</span>
@@ -554,7 +555,7 @@ export default function Messages({ lang, showToast, userName, memberKey, memberP
             {inbox.map(item => (
               <button type="button" key={item.id} className="messages-inbox-row" onClick={() => openConversation(item)}>
                 <div className="messages-avatar-wrap">
-                  <Avatar name={item.other_name} />
+                  <Avatar name={item.other_name} avatarUrl={item.avatar_url} />
                   {Number(item.unread_count || 0) > 0 && <span className="messages-unread-dot" />}
                 </div>
                 <div className="messages-inbox-copy">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard
+  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport
 } from 'react-icons/hi';
 import translations from './i18n/translations';
 import { apiRequest, submitPayFastCheckout } from './lib/api';
@@ -24,6 +24,8 @@ import Manifesto from './components/Manifesto';
 import MembershipLock from './components/MembershipLock';
 import Billing from './components/Billing';
 import BrandMark from './components/BrandMark';
+import ProfilePhoto from './components/ProfilePhoto';
+import Support from './components/Support';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home', public: true },
@@ -38,6 +40,7 @@ const TABS = [
   { id: 'community', icon: HiUsers, labelKey: 'community', public: true },
   { id: 'messages', icon: HiChatAlt2, labelKey: 'messages' },
   { id: 'waitlist', icon: HiUserAdd, labelKey: 'waitlist', public: true },
+  { id: 'support', icon: HiSupport, labelKey: 'support', public: true },
   { id: 'resell', icon: HiCurrencyDollar, labelKey: 'resell' },
 ];
 
@@ -91,6 +94,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [membership, setMembership] = useState(null);
   const [authModal, setAuthModal] = useState({ open: false, mode: 'login' });
+  const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
 
   const t = translations[lang];
   const user = session?.user || null;
@@ -98,7 +102,8 @@ export default function App() {
   const memberKey = user?.id || '';
   const userName = profile?.display_name || fallbackName(user);
   const memberPlan = profile?.plan || 'free';
-  const hasMemberAccess = Boolean(isAuthenticated && membership?.access_allowed);
+  const photoRequired = Boolean(isAuthenticated && profile?.photo_required);
+  const hasMemberAccess = Boolean(isAuthenticated && membership?.access_allowed && !photoRequired);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -118,11 +123,15 @@ export default function App() {
 
   const requireMemberAccess = useCallback(() => {
     if (!requireAuth()) return false;
+    if (profile?.photo_required) {
+      showToast(lang === 'en' ? 'Add your profile photo to continue.' : 'Voeg jou profielprent by om voort te gaan.');
+      return false;
+    }
     if (membership?.access_allowed) return true;
     setActiveTab('membership');
     showToast(lang === 'en' ? 'Your We-Rise membership needs attention.' : 'Jou We-Rise-lidmaatskap kort aandag.');
     return false;
-  }, [lang, membership?.access_allowed, requireAuth, showToast]);
+  }, [lang, membership?.access_allowed, profile?.photo_required, requireAuth, showToast]);
 
   useEffect(() => {
     if (!supabase) {
@@ -148,6 +157,7 @@ export default function App() {
       if (event === 'SIGNED_OUT') {
         setProfile(null);
         setMembership(null);
+        setProfilePhotoOpen(false);
         setActiveTab('home');
       }
     });
@@ -298,10 +308,12 @@ export default function App() {
           </button>
           {authReady && (isAuthenticated ? (
             <div className="header-member-wrap">
-              <div className="header-member-chip" title={user?.email || ''}>
-                <span className="header-member-avatar">{String(userName || 'W').trim().charAt(0).toUpperCase()}</span>
+              <button type="button" className="header-member-chip" title={lang === 'en' ? 'View or change profile photo' : 'Bekyk of verander profielprent'} onClick={() => setProfilePhotoOpen(true)}>
+                <span className="header-member-avatar">
+                  {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : String(userName || 'W').trim().charAt(0).toUpperCase()}
+                </span>
                 <span className="header-member-name">{userName || (lang === 'en' ? 'Member' : 'Lid')}</span>
-              </div>
+              </button>
               <button className="header-logout" onClick={signOut} aria-label={lang === 'en' ? 'Log out' : 'Meld af'} title={lang === 'en' ? 'Log out' : 'Meld af'}><HiLogout /></button>
             </div>
           ) : (
@@ -362,6 +374,7 @@ export default function App() {
             showToast={showToast}
             userName={userName}
             memberKey={memberKey}
+            profilePhotoUrl={profile?.avatar_url || ''}
             isAuthenticated={hasMemberAccess}
             onRequireAuth={() => requireMemberAccess()}
             onConversationChange={setCommunityConversationOpen}
@@ -385,12 +398,27 @@ export default function App() {
         {activeTab === 'safety' && renderPrivateFeature(<Safety t={t} lang={lang} showToast={showToast} memberKey={memberKey} userName={userName} />)}
         {activeTab === 'journal' && renderPrivateFeature(<Journal t={t} lang={lang} showToast={showToast} />)}
         {activeTab === 'waitlist' && <Waitlist lang={lang} userName={userName} showToast={showToast} />}
+        {activeTab === 'support' && <Support lang={lang} user={user} profile={profile} />}
         {activeTab === 'resell' && renderPrivateFeature(<ResellProgram t={t} lang={lang} showToast={showToast} />)}
 
         {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen && isAuthenticated)) && <Footer t={t} />}
       </main>
 
       <Manifesto />
+
+      {photoRequired && activeTab !== 'support' && (
+        <ProfilePhoto
+          lang={lang}
+          currentPhotoUrl={profile?.avatar_url || ''}
+          required
+          onUploaded={(updatedProfile) => {
+            if (updatedProfile) setProfile(updatedProfile);
+            refreshProfile();
+            showToast(lang === 'en' ? 'Your profile photo is ready.' : 'Jou profielprent is gereed.');
+          }}
+          onOpenSupport={() => setActiveTab('support')}
+        />
+      )}
 
       <nav className="bottom-nav" aria-label="Main navigation">
         {TABS.map(tab => {
@@ -420,6 +448,20 @@ export default function App() {
         lang={lang}
         onClose={() => setAuthModal(current => ({ ...current, open: false }))}
       />
+
+      {profilePhotoOpen && !photoRequired && (
+        <ProfilePhoto
+          lang={lang}
+          currentPhotoUrl={profile?.avatar_url || ''}
+          onClose={() => setProfilePhotoOpen(false)}
+          onUploaded={(updatedProfile) => {
+            if (updatedProfile) setProfile(updatedProfile);
+            setProfilePhotoOpen(false);
+            refreshProfile();
+            showToast(lang === 'en' ? 'Your profile photo was updated.' : 'Jou profielprent is opgedateer.');
+          }}
+        />
+      )}
     </div>
   );
 }
