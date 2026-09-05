@@ -3,7 +3,6 @@ import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import nodemailer from 'nodemailer';
 import sharp from 'sharp';
 import {
   createPayFastSignature,
@@ -52,13 +51,11 @@ const ADMIN_EMAILS = new Set(String(process.env.WE_RISE_ADMIN_EMAILS || '').spli
 const BACKMI_REVIEWER_EMAILS = new Set(String(process.env.BACKMI_REVIEWER_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const SUPPORT_TO_EMAIL = String(process.env.SUPPORT_TO_EMAIL || 'request4.support@gmail.com').trim().toLowerCase();
 const SUPPORT_EMAIL_ENABLED = String(process.env.SUPPORT_EMAIL_ENABLED || '').trim().toLowerCase() === 'true';
-const SUPPORT_SMTP_HOST = String(process.env.SUPPORT_SMTP_HOST || 'smtp.gmail.com').trim();
-const SUPPORT_SMTP_PORT = Math.max(1, Number(process.env.SUPPORT_SMTP_PORT || 465));
-const SUPPORT_SMTP_SECURE = String(process.env.SUPPORT_SMTP_SECURE || 'true').trim().toLowerCase() === 'true';
-const SUPPORT_SMTP_USER = String(process.env.SUPPORT_SMTP_USER || '').trim();
-const SUPPORT_SMTP_APP_PASSWORD = String(process.env.SUPPORT_SMTP_APP_PASSWORD || '').trim();
+const SUPPORT_EMAIL_PROVIDER = 'brevo';
+const BREVO_API_KEY = String(process.env.BREVO_API_KEY || '').trim();
+const SUPPORT_FROM_EMAIL = String(process.env.SUPPORT_FROM_EMAIL || 'request4.support@gmail.com').trim().toLowerCase();
 const SUPPORT_FROM_NAME = String(process.env.SUPPORT_FROM_NAME || 'We-Rise Support').trim().slice(0, 80);
-const SUPPORT_EMAIL_CONFIGURED = Boolean(SUPPORT_EMAIL_ENABLED && SUPPORT_TO_EMAIL && SUPPORT_SMTP_HOST && SUPPORT_SMTP_USER && SUPPORT_SMTP_APP_PASSWORD);
+const SUPPORT_EMAIL_CONFIGURED = Boolean(SUPPORT_EMAIL_ENABLED && SUPPORT_TO_EMAIL && SUPPORT_FROM_EMAIL && BREVO_API_KEY);
 const PAYFAST_CREDENTIALS_CONFIGURED = Boolean(PAYFAST_MERCHANT_ID && PAYFAST_MERCHANT_KEY && PAYFAST_PASSPHRASE);
 const PAYFAST_CONFIGURED = Boolean(PAYFAST_ENABLED && PAYFAST_CREDENTIALS_CONFIGURED);
 
@@ -474,23 +471,8 @@ async function supportAttachmentJpeg(file) {
   }
 }
 
-let supportTransporter = null;
-function getSupportTransporter() {
-  if (!SUPPORT_EMAIL_CONFIGURED) return null;
-  if (!supportTransporter) {
-    supportTransporter = nodemailer.createTransport({
-      host: SUPPORT_SMTP_HOST,
-      port: SUPPORT_SMTP_PORT,
-      secure: SUPPORT_SMTP_SECURE,
-      auth: { user: SUPPORT_SMTP_USER, pass: SUPPORT_SMTP_APP_PASSWORD },
-    });
-  }
-  return supportTransporter;
-}
-
 async function emailSupportTicket(ticket, attachmentBuffer = null) {
-  const transporter = getSupportTransporter();
-  if (!transporter) return { sent: false, status: 'disabled', providerId: null, error: 'Support email is not configured.' };
+  if (!SUPPORT_EMAIL_CONFIGURED) return { sent: false, status: 'disabled', providerId: null, error: 'Brevo support email is not configured.' };
 
   const body = [
     'A new We-Rise support request was received.',
@@ -511,17 +493,41 @@ async function emailSupportTicket(ticket, attachmentBuffer = null) {
   ].join('\n');
 
   try {
-    const result = await transporter.sendMail({
-      from: `"${SUPPORT_FROM_NAME.replace(/["\r\n]/g, '')}" <${SUPPORT_SMTP_USER}>`,
-      to: SUPPORT_TO_EMAIL,
-      replyTo: ticket.requester_email,
+    const requestBody = {
+      sender: { name: SUPPORT_FROM_NAME.replace(/["\r\n]/g, ''), email: SUPPORT_FROM_EMAIL },
+      to: [{ name: 'We-Rise Support', email: SUPPORT_TO_EMAIL }],
+      replyTo: { name: ticket.requester_name, email: ticket.requester_email },
       subject: `[We-Rise ${ticket.ticket_code}] ${ticket.subject}`,
-      text: body,
-      attachments: attachmentBuffer ? [{ filename: `${ticket.ticket_code}-screenshot.jpg`, content: attachmentBuffer, contentType: 'image/jpeg' }] : [],
+      textContent: body,
+    };
+    if (attachmentBuffer) {
+      requestBody.attachment = [{
+        name: `${ticket.ticket_code}-screenshot.jpg`,
+        content: attachmentBuffer.toString('base64'),
+      }];
+    }
+
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'api-key': BREVO_API_KEY,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(15000),
     });
+
+    let result = null;
+    try { result = await response.json(); } catch {}
+    if (!response.ok) {
+      const detail = result?.message || result?.code || `Brevo returned HTTP ${response.status}`;
+      throw new Error(detail);
+    }
+
     return { sent: true, status: 'sent', providerId: result?.messageId || null, error: null };
   } catch (error) {
-    console.error(`Support email ${ticket.ticket_code} failed:`, error?.message || error);
+    console.error(`Brevo support email ${ticket.ticket_code} failed:`, error?.message || error);
     return { sent: false, status: 'failed', providerId: null, error: String(error?.message || error || 'Email delivery failed.').slice(0, 500) };
   }
 }
@@ -664,6 +670,7 @@ app.post('/api/profile/photo', async (c) => {
 
 app.get('/api/support/config', (c) => c.json({
   available: true,
+  email_provider: SUPPORT_EMAIL_PROVIDER,
   email_delivery_ready: SUPPORT_EMAIL_CONFIGURED,
   attachments_allowed: true,
 }));

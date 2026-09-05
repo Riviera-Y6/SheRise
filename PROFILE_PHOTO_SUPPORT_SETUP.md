@@ -20,31 +20,29 @@ Then click **Run** and confirm that Supabase reports success.
 
 The migration must be completed before deploying the new backend because it adds the profile-photo fields, private Storage buckets and support-ticket tables used by the API.
 
-## 2. Configure Gmail delivery on Render
+## 2. Configure free Brevo HTTPS email delivery
 
-The support address needs a Google App Password. Do not use the normal Gmail password.
+Render Free blocks outgoing SMTP ports, so We-Rise sends support notifications through Brevo's HTTPS API instead.
 
-1. Sign in to the Google account for `request4.support@gmail.com`.
-2. Turn on **2-Step Verification** for that Google account.
-3. Open the Google Account **App passwords** page.
-4. Create a new app password named `We-Rise Render`.
-5. Copy the 16-character password.
-6. In Render, open **WeRise-API → Environment** and add the following variables:
+1. Create or sign in to a free Brevo account.
+2. In Brevo, open **Settings → Senders, Domains & Dedicated IPs → Senders**.
+3. Add `request4.support@gmail.com` as a sender named `We-Rise Support`.
+4. Complete the verification message Brevo sends to that Gmail inbox.
+5. Open **Settings → SMTP & API → API Keys**.
+6. Create a new API key named `We-Rise Render` and copy it immediately.
+7. In Render, open **WeRise-API → Environment** and add the following variables:
 
 ```text
 SUPPORT_TO_EMAIL=request4.support@gmail.com
 SUPPORT_EMAIL_ENABLED=true
-SUPPORT_SMTP_HOST=smtp.gmail.com
-SUPPORT_SMTP_PORT=465
-SUPPORT_SMTP_SECURE=true
-SUPPORT_SMTP_USER=request4.support@gmail.com
-SUPPORT_SMTP_APP_PASSWORD=PASTE_THE_GOOGLE_APP_PASSWORD_HERE
+SUPPORT_FROM_EMAIL=request4.support@gmail.com
 SUPPORT_FROM_NAME=We-Rise Support
+BREVO_API_KEY=PASTE_THE_BREVO_API_KEY_HERE
 ```
 
-Save the variables and redeploy the latest backend commit on Render.
+Delete the old `SUPPORT_SMTP_*` variables from Render because the free service cannot use them. Save the variables and redeploy the latest backend commit.
 
-Never put the App Password in GitHub, Vercel or a frontend `VITE_` variable. It belongs on Render only.
+Never put the Brevo API key in GitHub, Vercel or a frontend `VITE_` variable. It belongs on Render only. The old Google App Password is no longer needed and should be revoked in the Google account.
 
 ## 3. Deploy both repositories
 
@@ -70,4 +68,6 @@ Use a new test account and verify:
 9. Confirm a `SUPPORT-...` reference appears in We-Rise.
 10. Confirm the email reaches `request4.support@gmail.com` and that replying addresses the member directly.
 
-If Gmail delivery is not configured or temporarily fails, the request is still saved in `public.support_tickets`; the member is told that email delivery is delayed rather than being falsely told it was emailed.
+The live configuration endpoint should return `"email_provider":"brevo"` and `"email_delivery_ready":true`.
+
+If Brevo delivery is not configured or temporarily fails, the request is still saved in `public.support_tickets`; the member is told that email delivery is delayed rather than being falsely told it was emailed.

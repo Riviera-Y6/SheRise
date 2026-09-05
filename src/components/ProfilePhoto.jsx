@@ -79,11 +79,20 @@ export default function ProfilePhoto({
         <span className="profile-photo-camera-badge"><HiCamera /></span>
       </div>
 
-      <label className="profile-photo-picker">
-        <HiPhotograph />
-        <span>{file ? (af ? 'Kies ’n ander foto' : 'Choose a different photo') : (af ? 'Kies of neem ’n foto' : 'Choose or take a photo')}</span>
-        <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={choosePhoto} />
-      </label>
+      <div className="profile-photo-actions">
+        <label className="profile-photo-picker">
+          <HiPhotograph />
+          <span>{af ? 'Kies uit jou galery' : 'Choose from gallery'}</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={choosePhoto} />
+        </label>
+        <label className="profile-photo-picker profile-photo-camera-picker">
+          <HiCamera />
+          <span>{af ? 'Neem ’n foto' : 'Take a photo'}</span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={choosePhoto} />
+        </label>
+      </div>
+
+      {file && <div className="profile-photo-selected">{af ? 'Gekies:' : 'Selected:'} <strong>{file.name}</strong></div>}
 
       <div className="profile-photo-privacy">
         <HiShieldCheck />

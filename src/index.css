@@ -5154,6 +5154,26 @@ textarea.input {
 .profile-photo-picker input,
 .support-attachment input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
+.profile-photo-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+.profile-photo-camera-picker {
+  border-style: solid;
+  color: var(--text-primary);
+  background: rgba(255,255,255,.035);
+}
+.profile-photo-selected {
+  margin-top: 8px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 8px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.profile-photo-selected strong { color: var(--pink-light); font-weight: 700; }
+
 .profile-photo-privacy,
 .support-privacy-note {
   display: flex;
@@ -5322,6 +5342,7 @@ textarea.input {
   .profile-photo-card { padding: 20px 17px; }
   .profile-photo-title-row { gap: 10px; }
   .profile-photo-preview-shell { width: 128px; height: 128px; }
+  .profile-photo-actions { grid-template-columns: 1fr; }
   .support-grid-two { grid-template-columns: 1fr; gap: 0; }
   .support-form-card { padding: 16px; }
 }
