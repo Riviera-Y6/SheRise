@@ -215,7 +215,7 @@ export default function VisionBoard({ t, lang, showToast }) {
       {/* Inspiration */}
       <div className="card" style={{ background: 'rgba(255, 193, 7, 0.05)', border: '1px solid rgba(255, 193, 7, 0.15)', textAlign: 'center' }}>
         <div className="card-title" style={{ fontSize: 14, marginBottom: 4 }}>💫 {lang === 'en' ? 'What you focus on, grows' : 'Waarop jy fokus, groei'}</div>
-        <div className="card-subtitle" style={{ marginBottom: 0, fontSize: 12 }}>
+        <div className="card-subtitle" style={{ marginBottom: 0, fontSize: 14, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
           {lang === 'en' ? 'Write down your visions. Believe in them. Watch them become real.' : 'Skryf jou visies neer. Glo daarin. Kyk hoe word hulle werklikheid.'}
         </div>
       </div>
