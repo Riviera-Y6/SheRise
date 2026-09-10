@@ -50,9 +50,13 @@ export function getApiBase() {
 
 export function submitPayFastCheckout(checkout) {
   if (!checkout?.action || !checkout?.fields) throw new Error('The PayFast checkout is incomplete.');
+  const action = new URL(checkout.action);
+  if (!['https://www.payfast.co.za', 'https://sandbox.payfast.co.za'].includes(action.origin) || action.pathname !== '/eng/process') {
+    throw new Error('The PayFast checkout destination is invalid.');
+  }
   const form = document.createElement('form');
   form.method = 'POST';
-  form.action = checkout.action;
+  form.action = action.toString();
   form.style.display = 'none';
   for (const [name, value] of Object.entries(checkout.fields)) {
     const input = document.createElement('input');

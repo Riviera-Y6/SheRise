@@ -34,7 +34,31 @@ services:
         value: "false"
       - key: PAYFAST_IP_ALLOWLIST
         sync: false
+      - key: ENABLE_GEMINI_AI
+        value: "false"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_TIMEOUT_MS
+        value: "25000"
+      - key: GEMINI_TRIAL_DAILY_LIMIT
+        value: "10"
+      - key: GEMINI_MEMBER_DAILY_LIMIT
+        value: "30"
+      - key: GEMINI_STAFF_DAILY_LIMIT
+        value: "100"
       - key: WE_RISE_ADMIN_EMAILS
         sync: false
       - key: BACKMI_REVIEWER_EMAILS
+        sync: false
+      - key: SUPPORT_EMAIL_ENABLED
+        value: "false"
+      - key: SUPPORT_TO_EMAIL
+        value: request4.support@gmail.com
+      - key: SUPPORT_FROM_EMAIL
+        value: request4.support@gmail.com
+      - key: SUPPORT_FROM_NAME
+        value: We-Rise Support
+      - key: BREVO_API_KEY
         sync: false

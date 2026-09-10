@@ -474,6 +474,56 @@ textarea.input {
 }
 
 /* AI Chat */
+.ai-page { display: grid; gap: 14px; }
+.ai-hero-card {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 13px;
+  align-items: center;
+  padding: 17px;
+  border: 1px solid rgba(255,105,180,.2);
+  border-radius: 20px;
+  background: radial-gradient(circle at 100% 0%, rgba(255,105,180,.12), transparent 40%), rgba(45,45,68,.68);
+}
+.ai-hero-card .section-title { margin: 3px 0 4px; }
+.ai-hero-card .section-subtitle { margin: 0; }
+.ai-hero-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  color: white;
+  font-size: 23px;
+  background: var(--gradient-pink);
+  box-shadow: 0 9px 24px rgba(255,20,147,.18);
+}
+.ai-boundary-strip { display: grid; gap: 7px; }
+.ai-boundary-strip span {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,105,180,.12);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: rgba(255,105,180,.04);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.ai-boundary-strip svg { flex: 0 0 auto; margin-top: 2px; color: var(--pink); font-size: 16px; }
+.ai-unavailable-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid rgba(255,193,7,.2);
+  border-radius: 14px;
+  background: rgba(255,193,7,.06);
+}
+.ai-unavailable-note > svg { flex: 0 0 auto; color: #ffd166; font-size: 20px; }
+.ai-unavailable-note strong { display: block; margin-bottom: 3px; font-size: 12px; }
+.ai-unavailable-note p { color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
 .chat-container {
   display: flex;
   flex-direction: column;
@@ -519,6 +569,8 @@ textarea.input {
   border-radius: 16px;
   font-size: 14px;
   line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .chat-message.ai .chat-bubble {
@@ -533,6 +585,9 @@ textarea.input {
   border-bottom-right-radius: 4px;
   color: white;
 }
+.chat-status-crisis .chat-bubble { border-color: rgba(255,193,7,.28) !important; background: rgba(255,193,7,.07) !important; }
+.chat-status-error .chat-bubble { border-color: rgba(255,91,91,.24) !important; color: #ffc2c2 !important; }
+.chat-safety-label { display: flex; align-items: center; gap: 5px; margin-bottom: 7px; color: #ffd166; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 
 .chat-input-area {
   display: flex;
@@ -544,7 +599,8 @@ textarea.input {
   border-radius: var(--radius-sm);
 }
 
-.chat-input-area input {
+.chat-input-area input,
+.chat-input-area textarea {
   flex: 1;
   background: none;
   border: none;
@@ -552,9 +608,12 @@ textarea.input {
   font-size: 14px;
   outline: none;
   font-family: 'Inter', sans-serif;
+  line-height: 1.45;
+  resize: none;
 }
 
-.chat-input-area input::placeholder {
+.chat-input-area input::placeholder,
+.chat-input-area textarea::placeholder {
   color: var(--text-muted);
 }
 
@@ -603,6 +662,16 @@ textarea.input {
 
 .typing-indicator span:nth-child(3) {
   animation-delay: 0.4s;
+}
+.ai-input-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 0 3px; }
+.ai-input-meta span { color: var(--text-muted); font-size: 9.5px; line-height: 1.5; }
+.ai-input-meta strong { flex: 0 0 auto; color: var(--pink-light); font-size: 9px; white-space: nowrap; }
+
+@media (max-width: 420px) {
+  .ai-hero-card { grid-template-columns: 42px 1fr; padding: 14px; }
+  .ai-hero-icon { width: 42px; height: 42px; border-radius: 13px; }
+  .chat-bubble { max-width: 85%; padding: 11px 13px; }
+  .ai-input-meta { display: grid; }
 }
 
 /* BackMi Campaign Card */
@@ -4920,6 +4989,7 @@ textarea.input {
 .membership-price-card.featured { border-color: rgba(255,105,180,.28); box-shadow: inset 0 0 24px rgba(255,105,180,.05); }
 .membership-price-card.backmi-allocation-card strong { color: var(--pink-light); }
 .membership-checkout-card,
+.billing-subscription-card,
 .billing-history-card,
 .backmi-private-panel,
 .backmi-review-panel {
@@ -4930,8 +5000,18 @@ textarea.input {
 }
 .membership-checkout-card { display: grid; grid-template-columns: auto 1fr auto; gap: 13px; align-items: center; }
 .membership-checkout-card > svg { color: var(--pink); font-size: 27px; }
+.membership-checkout-card > .btn { grid-column: 3; grid-row: 1; }
 .membership-checkout-card strong { display: block; font-size: 12px; margin-bottom: 4px; }
 .membership-checkout-card p { color: var(--text-secondary); font-size: 9px; line-height: 1.5; }
+.membership-payment-consent { grid-column: 2 / -1; display: flex; align-items: flex-start; gap: 9px; padding: 10px 11px; border-radius: 11px; background: rgba(17,17,32,.42); color: var(--text-secondary); font-size: 10.5px; line-height: 1.5; cursor: pointer; }
+.membership-payment-consent input { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; accent-color: var(--pink); }
+.billing-subscription-card { display: grid; gap: 13px; }
+.billing-subscription-card h3 { margin-bottom: 5px; font-size: 15px; }
+.billing-subscription-card p { color: var(--text-secondary); font-size: 11.5px; line-height: 1.55; }
+.billing-subscription-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.billing-subscription-actions .btn { flex: 1 1 190px; justify-content: center; }
+.billing-cancel-btn { border: 1px solid rgba(255,82,82,.22); color: #ffaaaa; background: rgba(255,82,82,.07); }
+.billing-cancel-btn:hover:not(:disabled) { color: #fff; background: rgba(255,82,82,.16); }
 .payment-disabled-note { grid-column: 2 / -1; color: var(--warning); font-size: 8px; }
 .billing-history-card h3,
 .backmi-private-panel h3,
@@ -5004,7 +5084,8 @@ textarea.input {
   .membership-price-grid,
   .backmi-trust-strip { grid-template-columns: 1fr; }
   .membership-checkout-card { grid-template-columns: auto 1fr; }
-  .membership-checkout-card .btn { grid-column: 1 / -1; }
+  .membership-checkout-card .btn { grid-column: 1 / -1; grid-row: auto; }
+  .membership-payment-consent { grid-column: 1 / -1; }
   .billing-hero { flex-direction: column; }
   .payment-admin-grid,
   .ledger-balances { grid-template-columns: 1fr; }

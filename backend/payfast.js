@@ -12,6 +12,23 @@ export function payFastValidationUrl(mode = 'sandbox') {
     : 'https://sandbox.payfast.co.za/eng/query/validate';
 }
 
+export function payFastApiUrl(token, action, mode = 'sandbox') {
+  const safeToken = String(token || '').trim();
+  const safeAction = String(action || '').trim().toLowerCase();
+  if (!/^[a-zA-Z0-9-]{20,160}$/.test(safeToken)) throw new Error('Invalid PayFast subscription token.');
+  if (!['fetch', 'pause', 'unpause', 'cancel', 'update'].includes(safeAction)) throw new Error('Invalid PayFast subscription action.');
+  const testing = String(mode).toLowerCase() === 'live' ? '' : '?testing=true';
+  return `https://api.payfast.co.za/subscriptions/${encodeURIComponent(safeToken)}/${safeAction}${testing}`;
+}
+
+export function payFastCardUpdateUrl(token, returnUrl, mode = 'sandbox') {
+  const safeToken = String(token || '').trim();
+  if (!/^[a-zA-Z0-9-]{20,160}$/.test(safeToken)) throw new Error('Invalid PayFast subscription token.');
+  const host = String(mode).toLowerCase() === 'live' ? 'www.payfast.co.za' : 'sandbox.payfast.co.za';
+  const query = String(returnUrl || '').trim() ? `?return=${encodeURIComponent(String(returnUrl).trim())}` : '';
+  return `https://${host}/eng/recurring/update/${encodeURIComponent(safeToken)}${query}`;
+}
+
 export function phpUrlEncode(value) {
   return encodeURIComponent(String(value ?? '').trim())
     .replace(/%20/g, '+')
@@ -30,6 +47,28 @@ export function signaturePayload(fields, passphrase = '') {
 
 export function createPayFastSignature(fields, passphrase = '') {
   return createHash('md5').update(signaturePayload(fields, passphrase)).digest('hex');
+}
+
+export function apiSignaturePayload(fields, passphrase = '') {
+  const values = { ...(fields || {}) };
+  delete values.signature;
+  delete values.testing;
+  if (String(passphrase || '').trim()) values.passphrase = String(passphrase).trim();
+  return Object.entries(values)
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${phpUrlEncode(value)}`)
+    .join('&');
+}
+
+export function createPayFastApiSignature(fields, passphrase = '') {
+  return createHash('md5').update(apiSignaturePayload(fields, passphrase)).digest('hex');
+}
+
+export function payFastApiTimestamp(date = new Date()) {
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) throw new Error('Invalid PayFast API timestamp.');
+  return value.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 export function verifyPayFastSignature(fields, passphrase = '') {
@@ -74,5 +113,7 @@ export function normalizePaymentStatus(value) {
   if (status === 'COMPLETE') return 'complete';
   if (status === 'CANCELLED') return 'cancelled';
   if (status === 'FAILED') return 'failed';
+  if (status === 'REFUNDED') return 'refunded';
+  if (status === 'REVERSED') return 'reversed';
   return 'pending';
 }

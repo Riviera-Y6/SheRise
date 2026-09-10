@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { createHash, randomUUID } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { Hono } from 'hono';
@@ -6,7 +7,11 @@ import { cors } from 'hono/cors';
 import sharp from 'sharp';
 import {
   createPayFastSignature,
+  createPayFastApiSignature,
   parsePayFastBody,
+  payFastApiTimestamp,
+  payFastApiUrl,
+  payFastCardUpdateUrl,
   payFastProcessUrl,
   payFastValidationUrl,
   validationBody,
@@ -16,6 +21,7 @@ import {
   dateAfterDays,
   normalizePaymentStatus,
 } from './payfast.js';
+import { DEFAULT_MODEL, generateWeRiseAnswer, localAiGuard } from './gemini.js';
 
 const app = new Hono();
 
@@ -30,7 +36,7 @@ const MAX_SUPPORT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 const PROFILE_PHOTO_BUCKET = 'we-rise-profile-photos';
 const SUPPORT_ATTACHMENT_BUCKET = 'we-rise-support-attachments';
 const SUPPORT_CATEGORIES = new Set(['account', 'profile_photo', 'technical', 'membership_payment', 'backmi', 'community_messages', 'safety', 'other']);
-const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
+const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -58,6 +64,14 @@ const SUPPORT_FROM_NAME = String(process.env.SUPPORT_FROM_NAME || 'We-Rise Suppo
 const SUPPORT_EMAIL_CONFIGURED = Boolean(SUPPORT_EMAIL_ENABLED && SUPPORT_TO_EMAIL && SUPPORT_FROM_EMAIL && BREVO_API_KEY);
 const PAYFAST_CREDENTIALS_CONFIGURED = Boolean(PAYFAST_MERCHANT_ID && PAYFAST_MERCHANT_KEY && PAYFAST_PASSPHRASE);
 const PAYFAST_CONFIGURED = Boolean(PAYFAST_ENABLED && PAYFAST_CREDENTIALS_CONFIGURED);
+const GEMINI_ENABLED = String(process.env.ENABLE_GEMINI_AI || '').trim().toLowerCase() === 'true';
+const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL = String(process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
+const GEMINI_TIMEOUT_MS = Math.max(5000, Math.min(60000, Number(process.env.GEMINI_TIMEOUT_MS || 25000)));
+const GEMINI_TRIAL_DAILY_LIMIT = Math.max(1, Math.min(200, Number(process.env.GEMINI_TRIAL_DAILY_LIMIT || 10)));
+const GEMINI_MEMBER_DAILY_LIMIT = Math.max(1, Math.min(500, Number(process.env.GEMINI_MEMBER_DAILY_LIMIT || 30)));
+const GEMINI_STAFF_DAILY_LIMIT = Math.max(1, Math.min(2000, Number(process.env.GEMINI_STAFF_DAILY_LIMIT || 100)));
+const GEMINI_CONFIGURED = Boolean(GEMINI_ENABLED && GEMINI_API_KEY && /^[a-zA-Z0-9._-]{2,100}$/.test(GEMINI_MODEL));
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Copy backend/.env.example to backend/.env for local development, or set the variables in Render.');
@@ -121,6 +135,9 @@ function membershipSummary(profile) {
   const now = Date.now();
   const trialEnd = profile?.trial_ends_at ? new Date(profile.trial_ends_at).getTime() : 0;
   const graceEnd = profile?.subscription_grace_ends_at ? new Date(profile.subscription_grace_ends_at).getTime() : 0;
+  const paidThrough = profile?.subscription_next_billing_date
+    ? new Date(`${profile.subscription_next_billing_date}T23:59:59.999Z`).getTime()
+    : 0;
   const administrativeAccess = isReviewer(profile);
   let status = String(profile?.membership_status || 'trialing');
 
@@ -129,9 +146,10 @@ function membershipSummary(profile) {
 
   const trialActive = status === 'trialing' && trialEnd > now;
   const paidActive = status === 'active';
+  const cancelledPaidThrough = status === 'cancelled' && paidThrough > now && Boolean(profile?.joining_paid_at);
   return {
     status,
-    access_allowed: administrativeAccess || trialActive || paidActive || (status === 'past_due' && graceEnd > now),
+    access_allowed: administrativeAccess || trialActive || paidActive || cancelledPaidThrough || (status === 'past_due' && graceEnd > now),
     trial_active: trialActive,
     trial_started_at: profile?.trial_started_at || null,
     trial_ends_at: profile?.trial_ends_at || null,
@@ -141,6 +159,10 @@ function membershipSummary(profile) {
     next_billing_date: profile?.subscription_next_billing_date || null,
     cancelled_at: profile?.subscription_cancelled_at || null,
     monthly_amount_zar: profile?.subscription_monthly_amount_zar ? Number(profile.subscription_monthly_amount_zar) : null,
+    subscription_status: profile?.payfast_subscription_status || null,
+    has_subscription: Boolean(profile?.payfast_subscription_token),
+    grace_ends_at: profile?.subscription_grace_ends_at || null,
+    access_ends_at: cancelledPaidThrough ? profile.subscription_next_billing_date : null,
   };
 }
 
@@ -211,12 +233,14 @@ function publicPaymentSettings(settings) {
     backmi_allocation_percentage: Number(settings.backmi_allocation_percentage),
     allocation_fee_basis: settings.allocation_fee_basis,
     first_recurring_delay_days: Number(settings.first_recurring_delay_days),
+    subscription_grace_days: Number(settings.subscription_grace_days || 5),
     minimum_gift_zar: Number(settings.minimum_gift_zar),
     maximum_gift_zar: Number(settings.maximum_gift_zar),
     membership_payments_enabled: Boolean(settings.membership_payments_enabled && PAYFAST_CONFIGURED),
     backmi_gifts_enabled: Boolean(settings.backmi_gifts_enabled && PAYFAST_CONFIGURED && BACKMI_PAYMENTS_ENABLED),
     payfast_mode: PAYFAST_MODE,
     payfast_configured: PAYFAST_CONFIGURED,
+    subscription_management_enabled: Boolean(PAYFAST_CONFIGURED),
     payouts_enabled: false,
   };
 }
@@ -252,13 +276,71 @@ function signedPayFastFields(fields) {
 }
 
 async function validatePayFastServer(fields) {
-  const response = await fetch(payFastValidationUrl(PAYFAST_MODE), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: validationBody(fields),
-  });
-  if (!response.ok) return false;
-  return (await response.text()).trim() === 'VALID';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(payFastValidationUrl(PAYFAST_MODE), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: validationBody(fields),
+      signal: controller.signal,
+    });
+    if (!response.ok) return false;
+    return (await response.text()).trim() === 'VALID';
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function payFastSubscriptionRequest(token, action, body = null) {
+  if (!PAYFAST_CONFIGURED) throw new Error('PayFast subscription management is not configured.');
+  const timestamp = payFastApiTimestamp();
+  const signatureFields = {
+    'merchant-id': PAYFAST_MERCHANT_ID,
+    timestamp,
+    version: 'v1',
+    ...(body || {}),
+  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(payFastApiUrl(token, action, PAYFAST_MODE), {
+      method: action === 'fetch' ? 'GET' : action === 'update' ? 'PATCH' : 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'merchant-id': PAYFAST_MERCHANT_ID,
+        version: 'v1',
+        timestamp,
+        signature: createPayFastApiSignature(signatureFields, PAYFAST_PASSPHRASE),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.status === 'failed' || payload?.data?.response === false) {
+      const error = new Error(payload?.data?.message || payload?.status || `PayFast subscription request failed (${response.status}).`);
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('PayFast did not respond in time. Please try again.');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function payFastEventKey(fields) {
+  const stable = [
+    fields?.pf_payment_id,
+    fields?.payment_status,
+    fields?.token,
+    fields?.m_payment_id,
+    fields?.billing_date,
+    fields?.amount_gross,
+  ].map(value => String(value || '').trim()).join('|');
+  return createHash('sha256').update(stable).digest('hex');
 }
 
 
@@ -622,6 +704,140 @@ app.get('/api/auth/profile', async (c) => {
   }
 });
 
+function aiDailyLimitFor(auth) {
+  if (isReviewer(auth?.profile)) return GEMINI_STAFF_DAILY_LIMIT;
+  return auth?.membership?.trial_active ? GEMINI_TRIAL_DAILY_LIMIT : GEMINI_MEMBER_DAILY_LIMIT;
+}
+
+async function finishAiUsage(requestId, values) {
+  const update = {
+    status: values.status,
+    category: String(values.category || '').slice(0, 80) || null,
+    output_chars: Math.max(0, Math.min(10000, Number(values.output_chars || 0))),
+    prompt_tokens: Math.max(0, Number(values.prompt_tokens || 0)),
+    output_tokens: Math.max(0, Number(values.output_tokens || 0)),
+    total_tokens: Math.max(0, Number(values.total_tokens || 0)),
+    latency_ms: Math.max(0, Number(values.latency_ms || 0)),
+    error_code: String(values.error_code || '').slice(0, 80) || null,
+    completed_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from('ai_usage_events').update(update).eq('request_id', requestId);
+  if (error) console.error('Could not finish AI usage audit:', error.message);
+}
+
+app.get('/api/ai/config', async (c) => {
+  try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    const dailyLimit = aiDailyLimitFor(auth);
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const { count, error } = await supabase.from('ai_usage_events')
+      .select('request_id', { count: 'exact', head: true })
+      .eq('member_key', auth.memberKey)
+      .gte('created_at', dayStart.toISOString());
+    if (error) throw error;
+    return c.json({
+      available: GEMINI_CONFIGURED,
+      model: GEMINI_CONFIGURED ? GEMINI_MODEL : null,
+      daily_limit: dailyLimit,
+      used_today: Number(count || 0),
+      remaining: Math.max(0, dailyLimit - Number(count || 0)),
+      stores_conversation_content: false,
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/ai/chat', async (c) => {
+  const startedAt = Date.now();
+  let requestId = null;
+  try {
+    const auth = await memberAccessContext(c);
+    if (auth.response) return auth.response;
+    if (!GEMINI_CONFIGURED) {
+      return c.json({ error: 'Ask We-Rise is temporarily unavailable while its secure AI connection is being configured.', code: 'AI_NOT_CONFIGURED' }, 503);
+    }
+
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== 'object') return c.json({ error: 'Send a valid Ask We-Rise question.' }, 400);
+    const question = String(body?.question || '').trim();
+    const lang = body?.lang === 'af' ? 'af' : 'en';
+    const messages = Array.isArray(body?.messages) ? body.messages.slice(-8) : [];
+    const historyChars = messages.reduce((total, message) => total + String(message?.content || '').length, 0);
+    if (question.length < 2) return c.json({ error: 'Type a question for Ask We-Rise.' }, 400);
+    if (question.length > 1600 || historyChars > 10000) return c.json({ error: 'Keep the question and recent conversation a little shorter.' }, 400);
+
+    requestId = randomUUID();
+    const dailyLimit = aiDailyLimitFor(auth);
+    const { data: reservation, error: reservationError } = await supabase.rpc('reserve_ai_request', {
+      p_member_key: auth.memberKey,
+      p_request_id: requestId,
+      p_model: GEMINI_MODEL,
+      p_daily_limit: dailyLimit,
+      p_prompt_chars: question.length + historyChars,
+    });
+    if (reservationError) throw reservationError;
+    if (!reservation?.allowed) {
+      return c.json({
+        error: lang === 'af'
+          ? 'Jy het vandag se Ask We-Rise-vrae gebruik. Probeer asseblief môre weer.'
+          : 'You have used today’s Ask We-Rise questions. Please try again tomorrow.',
+        code: 'AI_DAILY_LIMIT',
+        remaining: 0,
+        daily_limit: dailyLimit,
+      }, 429);
+    }
+
+    const guarded = localAiGuard(question, lang);
+    const result = guarded || await generateWeRiseAnswer({
+      apiKey: GEMINI_API_KEY,
+      model: GEMINI_MODEL,
+      lang,
+      messages,
+      question,
+      timeoutMs: GEMINI_TIMEOUT_MS,
+    });
+    const usage = result.usage || {};
+    await finishAiUsage(requestId, {
+      status: guarded ? 'redirected' : result.status === 'redirect' ? 'redirected' : result.status === 'crisis' ? 'completed' : 'completed',
+      category: result.topic,
+      output_chars: result.answer.length,
+      prompt_tokens: usage.prompt_tokens,
+      output_tokens: usage.output_tokens,
+      total_tokens: usage.total_tokens,
+      latency_ms: Date.now() - startedAt,
+    });
+
+    return c.json({
+      request_id: requestId,
+      status: result.status,
+      topic: result.topic,
+      answer: result.answer,
+      remaining: Number(reservation.remaining || 0),
+      daily_limit: Number(reservation.daily_limit || dailyLimit),
+    });
+  } catch (error) {
+    if (requestId) {
+      await finishAiUsage(requestId, {
+        status: error?.code === 'AI_RESPONSE_BLOCKED' ? 'blocked' : 'failed',
+        error_code: error?.code || 'AI_ERROR',
+        latency_ms: Date.now() - startedAt,
+      });
+    }
+    console.error('Ask We-Rise failed:', error?.message || error);
+    if (error?.code === 'AI_RESPONSE_BLOCKED') {
+      return c.json({ error: 'Ask We-Rise could not safely answer that request. Try asking it in a different way.', code: error.code }, 422);
+    }
+    if (error?.code === 'AI_RATE_LIMITED' || error?.status === 429) {
+      return c.json({ error: 'Ask We-Rise is busy right now. Please wait a moment and try again.', code: 'AI_PROVIDER_BUSY' }, 503);
+    }
+    if (error?.code === 'AI_TIMEOUT') return c.json({ error: error.message, code: error.code }, 504);
+    return c.json({ error: 'Ask We-Rise could not answer right now. Please try again shortly.', code: 'AI_UNAVAILABLE' }, 503);
+  }
+});
+
 app.post('/api/profile/photo', async (c) => {
   try {
     const auth = await authContext(c);
@@ -788,6 +1004,11 @@ app.get('/api/billing/status', async (c) => {
       getPaymentSettings(),
     ]);
     if (paymentError) throw paymentError;
+    const canManageSubscription = Boolean(
+      PAYFAST_CONFIGURED
+      && auth.profile.payfast_subscription_token
+      && !auth.profile.subscription_cancelled_at,
+    );
     return c.json({
       membership: auth.membership,
       profile: await safeProfileWithAvatar(auth.profile),
@@ -804,6 +1025,13 @@ app.get('/api/billing/status', async (c) => {
         amount_fee_zar: payment.amount_fee_zar === null ? null : Number(payment.amount_fee_zar),
         amount_net_zar: payment.amount_net_zar === null ? null : Number(payment.amount_net_zar),
       })),
+      subscription_actions: {
+        can_update_card: canManageSubscription,
+        can_cancel: canManageSubscription,
+        update_card_url: canManageSubscription
+          ? payFastCardUpdateUrl(auth.profile.payfast_subscription_token, `${primaryFrontendUrl}/?billing=card-return`, PAYFAST_MODE)
+          : null,
+      },
     });
   } catch (error) {
     return fail(c, error);
@@ -814,6 +1042,10 @@ app.post('/api/billing/membership/checkout', async (c) => {
   try {
     const auth = await authContext(c);
     if (auth.response) return auth.response;
+    const checkoutConsent = await c.req.json().catch(() => ({}));
+    if (checkoutConsent?.accepted_recurring_terms !== true) {
+      return c.json({ error: 'Confirm the once-off and recurring membership terms before continuing to PayFast.', code: 'PAYMENT_CONSENT_REQUIRED' }, 400);
+    }
     if (profilePhotoRequired(auth.profile)) {
       return c.json({
         error: 'Add your required profile photo before completing We-Rise membership.',
@@ -829,7 +1061,12 @@ app.post('/api/billing/membership/checkout', async (c) => {
         membership,
       }, 409);
     }
-    if (membership.joining_paid_at) {
+    const restartingCancelledMembership = Boolean(
+      membership.joining_paid_at
+      && membership.status === 'cancelled'
+      && !membership.access_allowed,
+    );
+    if (membership.joining_paid_at && !restartingCancelledMembership) {
       return c.json({
         error: 'Your joining payment is already recorded. Please do not pay it again; the monthly subscription needs attention.',
         code: 'SUBSCRIPTION_ATTENTION',
@@ -842,10 +1079,11 @@ app.post('/api/billing/membership/checkout', async (c) => {
     if (!PAYFAST_CONFIGURED) return c.json({ error: 'PayFast has not been configured on the We-Rise server yet.', code: 'PAYFAST_NOT_CONFIGURED' }, 503);
 
     const recentCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const paymentPurpose = restartingCancelledMembership ? 'membership_recurring' : 'membership_joining';
     const { data: recent, error: recentError } = await supabase.from('payment_transactions')
       .select('checkout_reference, expected_amount_zar, metadata, created_at')
       .eq('member_key', auth.memberKey)
-      .eq('purpose', 'membership_joining')
+      .eq('purpose', paymentPurpose)
       .eq('status', 'pending')
       .gte('created_at', recentCutoff)
       .order('created_at', { ascending: false })
@@ -854,17 +1092,21 @@ app.post('/api/billing/membership/checkout', async (c) => {
     if (recentError) throw recentError;
 
     const reference = recent?.checkout_reference || checkoutReference('WR-MEM');
-    const joiningFeeZar = recent ? Number(recent.expected_amount_zar) : Number(settings.joining_fee_zar);
+    const initialChargeZar = recent
+      ? Number(recent.expected_amount_zar)
+      : restartingCancelledMembership ? Number(settings.monthly_fee_zar) : Number(settings.joining_fee_zar);
     const monthlyFeeZar = recent?.metadata?.monthly_fee_zar ? Number(recent.metadata.monthly_fee_zar) : Number(settings.monthly_fee_zar);
     const firstBillingDate = recent?.metadata?.first_billing_date || dateAfterDays(settings.first_recurring_delay_days);
+    const itemName = restartingCancelledMembership ? 'We-Rise Monthly Membership Restart' : 'We-Rise Joining & Monthly Membership';
+    const recurringTermsAcceptedAt = new Date().toISOString();
 
     if (!recent) {
       const { error } = await supabase.from('payment_transactions').insert({
         member_key: auth.memberKey,
-        purpose: 'membership_joining',
+        purpose: paymentPurpose,
         checkout_reference: reference,
-        expected_amount_zar: Number(settings.joining_fee_zar),
-        item_name: 'We-Rise Joining & Monthly Membership',
+        expected_amount_zar: initialChargeZar,
+        item_name: itemName,
         status: 'pending',
         metadata: {
           joining_fee_usd: Number(settings.joining_fee_usd),
@@ -872,8 +1114,21 @@ app.post('/api/billing/membership/checkout', async (c) => {
           monthly_fee_usd: Number(settings.monthly_fee_usd),
           monthly_fee_zar: Number(settings.monthly_fee_zar),
           first_billing_date: firstBillingDate,
+          subscription_restart: restartingCancelledMembership,
+          recurring_terms_version: '2026-09-10',
+          recurring_terms_accepted_at: recurringTermsAcceptedAt,
         },
       });
+      if (error) throw error;
+    } else if (!recent.metadata?.recurring_terms_accepted_at) {
+      const { error } = await supabase.from('payment_transactions').update({
+        metadata: {
+          ...(recent.metadata || {}),
+          recurring_terms_version: '2026-09-10',
+          recurring_terms_accepted_at: recurringTermsAcceptedAt,
+        },
+        updated_at: recurringTermsAcceptedAt,
+      }).eq('checkout_reference', reference);
       if (error) throw error;
     }
 
@@ -888,10 +1143,10 @@ app.post('/api/billing/membership/checkout', async (c) => {
       name_last: memberName.last,
       email_address: auth.user.email || '',
       m_payment_id: reference,
-      amount: moneyString(joiningFeeZar),
-      item_name: 'We-Rise Joining & Monthly Membership',
-      item_description: 'One-time We-Rise joining fee followed by monthly membership',
-      custom_str1: 'membership_joining',
+      amount: moneyString(initialChargeZar),
+      item_name: itemName,
+      item_description: restartingCancelledMembership ? 'Restarted monthly We-Rise membership' : 'One-time We-Rise joining fee followed by monthly membership',
+      custom_str1: paymentPurpose,
       custom_str2: auth.memberKey,
       subscription_type: 1,
       billing_date: firstBillingDate,
@@ -899,13 +1154,90 @@ app.post('/api/billing/membership/checkout', async (c) => {
       frequency: 3,
       cycles: 0,
       subscription_notify_email: 1,
-      subscription_notify_webhook: 1,
+      subscription_notify_webhook: 0,
       subscription_notify_buyer: 1,
     });
 
     return c.json({ action: payFastProcessUrl(PAYFAST_MODE), fields, mode: PAYFAST_MODE });
   } catch (error) {
     return fail(c, error);
+  }
+});
+
+app.post('/api/billing/subscription/cancel', async (c) => {
+  let payFastAccepted = false;
+  let cancellingMemberKey = null;
+  let cancellingMembership = null;
+  try {
+    const auth = await authContext(c);
+    if (auth.response) return auth.response;
+    if (!PAYFAST_CONFIGURED) return c.json({ error: 'PayFast subscription management is temporarily unavailable.' }, 503);
+    if (!auth.profile.payfast_subscription_token) return c.json({ error: 'No PayFast subscription is linked to this membership.' }, 404);
+    if (auth.profile.subscription_cancelled_at || auth.membership.status === 'cancelled') {
+      return c.json({ error: 'This subscription is already cancelled.', code: 'ALREADY_CANCELLED' }, 409);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    if (body?.confirmation !== 'CANCEL') return c.json({ error: 'Cancellation confirmation is required.' }, 400);
+
+    cancellingMemberKey = auth.memberKey;
+    cancellingMembership = auth.membership;
+    await payFastSubscriptionRequest(auth.profile.payfast_subscription_token, 'cancel');
+    payFastAccepted = true;
+    const eventFields = {
+      payment_status: 'CANCELLED',
+      token: auth.profile.payfast_subscription_token,
+      m_payment_id: `MEMBER-CANCEL-${auth.memberKey}`,
+    };
+    const settings = await getPaymentSettings();
+    const { data, error } = await supabase.rpc('record_payfast_status_event', {
+      p_event_key: payFastEventKey(eventFields),
+      p_member_key: auth.memberKey,
+      p_transaction_id: null,
+      p_purpose: 'membership_recurring',
+      p_merchant_reference: eventFields.m_payment_id,
+      p_pf_payment_id: null,
+      p_subscription_token: auth.profile.payfast_subscription_token,
+      p_payment_status: 'cancelled',
+      p_payload: { source: 'member_request', action: 'cancel' },
+      p_grace_days: Number(settings.subscription_grace_days || 5),
+    });
+    if (error) throw error;
+    if (!data?.success) throw new Error('The cancellation could not be recorded.');
+
+    const { data: updated, error: profileError } = await supabase.from('member_profiles')
+      .select(PROFILE_COLUMNS)
+      .eq('member_key', auth.memberKey)
+      .single();
+    if (profileError) throw profileError;
+    return c.json({
+      success: true,
+      membership: membershipSummary(updated),
+      message: 'Your recurring PayFast subscription has been cancelled. No further monthly charges will be requested.',
+    });
+  } catch (error) {
+    console.error('PayFast subscription cancellation failed:', error?.message || error);
+    if (payFastAccepted && cancellingMemberKey) {
+      const now = new Date().toISOString();
+      const { data: recovered } = await supabase.from('member_profiles').update({
+        membership_status: 'cancelled',
+        payfast_subscription_status: 'cancelled',
+        subscription_cancelled_at: now,
+        subscription_grace_ends_at: null,
+        subscription_status_updated_at: now,
+        updated_at: now,
+      }).eq('member_key', cancellingMemberKey).select(PROFILE_COLUMNS).maybeSingle();
+      return c.json({
+        success: true,
+        pending_audit_sync: true,
+        membership: recovered ? membershipSummary(recovered) : {
+          ...(cancellingMembership || {}),
+          status: 'cancelled',
+          subscription_status: 'cancelled',
+        },
+        message: 'PayFast accepted the cancellation. We-Rise is completing the local audit record.',
+      }, 202);
+    }
+    return c.json({ error: 'We could not cancel the PayFast subscription right now. No local cancellation was recorded. Please try again or contact We-Rise Support.' }, 502);
   }
 });
 
@@ -930,44 +1262,100 @@ app.post('/api/payfast/itn', async (c) => {
     const subscriptionToken = String(fields.token || '').trim();
     const pfPaymentId = String(fields.pf_payment_id || '').trim();
     const amountGross = Number(fields.amount_gross);
-    if (!pfPaymentId || !Number.isFinite(amountGross) || amountGross <= 0) return c.text('Invalid payment details', 400);
+    const normalizedStatus = normalizePaymentStatus(fields.payment_status);
+    if (normalizedStatus === 'complete' && (!pfPaymentId || !Number.isFinite(amountGross) || amountGross <= 0)) {
+      return c.text('Invalid payment details', 400);
+    }
 
-    let { data: pending, error: pendingError } = await supabase.from('payment_transactions')
-      .select('id, expected_amount_zar, purpose, member_key')
-      .eq('checkout_reference', merchantReference)
-      .eq('status', 'pending')
-      .maybeSingle();
-    if (pendingError) throw pendingError;
+    let transaction = null;
+    if (pfPaymentId && ['refunded', 'reversed'].includes(normalizedStatus)) {
+      const { data, error } = await supabase.from('payment_transactions')
+        .select('id, expected_amount_zar, purpose, member_key, status, metadata')
+        .eq('pf_payment_id', pfPaymentId)
+        .maybeSingle();
+      if (error) throw error;
+      transaction = data;
+    }
+    if (!transaction && merchantReference) {
+      const { data, error } = await supabase.from('payment_transactions')
+        .select('id, expected_amount_zar, purpose, member_key, status, metadata')
+        .eq('checkout_reference', merchantReference)
+        .maybeSingle();
+      if (error) throw error;
+      transaction = data;
+    }
+    if (!transaction && pfPaymentId) {
+      const { data, error } = await supabase.from('payment_transactions')
+        .select('id, expected_amount_zar, purpose, member_key, status, metadata')
+        .eq('pf_payment_id', pfPaymentId)
+        .maybeSingle();
+      if (error) throw error;
+      transaction = data;
+    }
 
-    if (!pending && subscriptionToken) {
-      const { data: subscriptionMember, error: subscriptionError } = await supabase.from('member_profiles')
-        .select('member_key, subscription_monthly_amount_zar')
+    let subscriptionMember = null;
+    if (subscriptionToken) {
+      const { data: tokenMember, error: subscriptionError } = await supabase.from('member_profiles')
+        .select('member_key, subscription_monthly_amount_zar, payfast_subscription_token')
         .eq('payfast_subscription_token', subscriptionToken)
         .maybeSingle();
       if (subscriptionError) throw subscriptionError;
-      if (subscriptionMember) pending = {
+      subscriptionMember = tokenMember || null;
+    }
+    if (
+      subscriptionMember
+      && normalizedStatus === 'complete'
+      && transaction?.purpose === 'membership_joining'
+      && transaction?.status === 'complete'
+      && Math.abs(Number(subscriptionMember.subscription_monthly_amount_zar) - amountGross) <= 0.01
+    ) {
+      transaction = {
         purpose: 'membership_recurring',
         member_key: subscriptionMember.member_key,
         expected_amount_zar: subscriptionMember.subscription_monthly_amount_zar,
       };
     }
-    if (!pending) return c.text('Unknown payment reference', 400);
-    if (Math.abs(Number(pending.expected_amount_zar) - amountGross) > 0.01) return c.text('Amount mismatch', 400);
+    if (
+      subscriptionMember
+      && ['pending', 'failed', 'cancelled'].includes(normalizedStatus)
+      && transaction?.purpose === 'membership_joining'
+      && transaction?.status === 'complete'
+    ) {
+      transaction = {
+        purpose: 'membership_recurring',
+        member_key: subscriptionMember.member_key,
+        expected_amount_zar: subscriptionMember.subscription_monthly_amount_zar,
+      };
+    }
+    if (!transaction && subscriptionMember) {
+      transaction = {
+        purpose: 'membership_recurring',
+        member_key: subscriptionMember.member_key,
+        expected_amount_zar: subscriptionMember.subscription_monthly_amount_zar,
+      };
+    }
+    if (!transaction) return c.text('Unknown payment reference', 400);
 
-    const normalizedStatus = normalizePaymentStatus(fields.payment_status);
     if (normalizedStatus !== 'complete') {
-      if (pending.id) {
-        await supabase.from('payment_transactions').update({ status: normalizedStatus, updated_at: new Date().toISOString() }).eq('id', pending.id);
-      }
-      if (pending.purpose === 'membership_recurring' && pending.member_key) {
-        await supabase.from('member_profiles').update({
-          membership_status: 'past_due',
-          subscription_grace_ends_at: null,
-          updated_at: new Date().toISOString(),
-        }).eq('member_key', pending.member_key);
-      }
+      const settings = await getPaymentSettings();
+      const { data, error } = await supabase.rpc('record_payfast_status_event', {
+        p_event_key: payFastEventKey(fields),
+        p_member_key: transaction.member_key,
+        p_transaction_id: transaction.id || null,
+        p_purpose: transaction.purpose,
+        p_merchant_reference: merchantReference || null,
+        p_pf_payment_id: pfPaymentId || null,
+        p_subscription_token: subscriptionToken || null,
+        p_payment_status: normalizedStatus,
+        p_payload: cleanPayFastPayload(fields),
+        p_grace_days: Number(settings.subscription_grace_days || 5),
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error('PayFast status could not be recorded.');
       return c.text('OK', 200);
     }
+
+    if (Math.abs(Number(transaction.expected_amount_zar) - amountGross) > 0.01) return c.text('Amount mismatch', 400);
 
     const billingDate = /^\d{4}-\d{2}-\d{2}$/.test(String(fields.billing_date || '')) ? fields.billing_date : null;
     const { data, error } = await supabase.rpc('finalize_payfast_payment', {
@@ -982,6 +1370,31 @@ app.post('/api/payfast/itn', async (c) => {
     });
     if (error) throw error;
     if (!data?.success) throw new Error('PayFast payment could not be finalised.');
+
+    if (transaction?.metadata?.subscription_restart) {
+      const { error: restartError } = await supabase.from('member_profiles').update({
+        subscription_next_billing_date: billingDate || transaction.metadata.first_billing_date || null,
+        subscription_cancelled_at: null,
+        payfast_subscription_status: 'active',
+        subscription_status_updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('member_key', transaction.member_key);
+      if (restartError) throw restartError;
+    }
+
+    const { error: auditError } = await supabase.from('payment_notification_events').insert({
+      event_key: payFastEventKey(fields),
+      pf_payment_id: pfPaymentId,
+      subscription_token: subscriptionToken || null,
+      merchant_reference: merchantReference || null,
+      payment_status: 'complete',
+      member_key: transaction.member_key,
+      payment_transaction_id: data.transaction_id || transaction.id || null,
+      payload: cleanPayFastPayload(fields),
+      processing_status: 'processed',
+      processed_at: new Date().toISOString(),
+    });
+    if (auditError && auditError.code !== '23505') console.error('Could not store PayFast notification audit:', auditError.message);
     return c.text('OK', 200);
   } catch (error) {
     console.error('PayFast ITN failed', error);
@@ -1013,6 +1426,7 @@ app.put('/api/admin/payment-settings', async (c) => {
       backmi_allocation_percentage: number('backmi_allocation_percentage', 0, 100),
       allocation_fee_basis: ['gross', 'net'].includes(body.allocation_fee_basis) ? body.allocation_fee_basis : current.allocation_fee_basis,
       first_recurring_delay_days: Math.round(number('first_recurring_delay_days', 1, 365)),
+      subscription_grace_days: Math.round(number('subscription_grace_days', 0, 30)),
       minimum_gift_zar: number('minimum_gift_zar', 1, 10000000),
       maximum_gift_zar: number('maximum_gift_zar', 1, 10000000),
       membership_payments_enabled: body.membership_payments_enabled === undefined ? current.membership_payments_enabled : Boolean(body.membership_payments_enabled),

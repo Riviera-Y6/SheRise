@@ -232,6 +232,17 @@ export default function App() {
     }
   }, [lang, refreshCampaigns, refreshProfile, showToast]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('billing') !== 'card-return') return;
+    setActiveTab('membership');
+    showToast(lang === 'en'
+      ? 'PayFast returned you to We-Rise. Your card details remain securely with PayFast.'
+      : 'PayFast het jou na We-Rise teruggestuur. Jou kaartbesonderhede bly veilig by PayFast.');
+    window.history.replaceState({}, document.title, window.location.pathname);
+    window.setTimeout(refreshProfile, 1500);
+  }, [lang, refreshProfile, showToast]);
+
   const toggleLang = () => setLang(prev => prev === 'en' ? 'af' : 'en');
 
   const addCampaign = async (campaign) => {
