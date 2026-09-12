@@ -137,7 +137,7 @@ const translations = {
     membership: 'Lidmaatskap',
     waitlist: 'Waglys',
     support: 'Ondersteuning',
-    resell: 'Resellers',
+    resell: 'Herverkopers',
     settings: 'Instellings',
     dailyAffirmation: 'Vandag se Bevestiging',
     welcomeBack: 'Welkom terug',
