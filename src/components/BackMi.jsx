@@ -253,8 +253,8 @@ export default function BackMi({
           <div className="backmi-review-warning"><HiShieldCheck /> {lang === 'en' ? 'This is a voluntary gift to the specific approved member. It is not an investment, loan or required payment.' : 'Dit is ’n vrywillige geskenk aan die spesifieke goedgekeurde lid. Dit is nie ’n belegging, lening of verpligte betaling nie.'}</div>
           <div className="gift-presets">{[50, 100, 250, 500].map(value => <button key={value} className={Number(donationAmount) === value ? 'active' : ''} onClick={() => setDonationAmount(String(value))}>R{value}</button>)}</div>
           <div className="form-group"><label>{lang === 'en' ? 'Gift amount' : 'Geskenkbedrag'} (R)</label><input className="input" type="number" min="10" value={donationAmount} onChange={event => setDonationAmount(event.target.value)} /></div>
-          <div className="modal-actions"><button className="btn btn-secondary" onClick={() => setShowDonate(null)}>{t.cancel}</button><button className="btn btn-primary" onClick={() => handleGift(showDonate)} disabled={!donationAmount}><HiHeart /> {lang === 'en' ? 'Continue to PayFast' : 'Gaan voort na PayFast'}</button></div>
-          <p className="payment-note">{lang === 'en' ? 'The gift appears in BackMi only after server-side confirmation from PayFast.' : 'Die geskenk verskyn eers in BackMi nadat PayFast dit direk aan die stelsel bevestig het.'}</p>
+          <div className="modal-actions"><button className="btn btn-secondary" onClick={() => setShowDonate(null)}>{t.cancel}</button><button className="btn btn-primary" onClick={() => handleGift(showDonate)} disabled={!donationAmount}><HiHeart /> {lang === 'en' ? 'Continue to Paystack' : 'Gaan voort na Paystack'}</button></div>
+          <p className="payment-note">{lang === 'en' ? 'The gift appears in BackMi only after server-side confirmation from Paystack.' : 'Die geskenk verskyn eers in BackMi nadat Paystack dit direk aan die stelsel bevestig het.'}</p>
         </div></div>
       )}
     </div>

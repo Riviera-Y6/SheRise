@@ -3,7 +3,7 @@ import {
   HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport
 } from 'react-icons/hi';
 import translations from './i18n/translations';
-import { apiRequest, submitPayFastCheckout } from './lib/api';
+import { apiRequest, submitPaystackCheckout } from './lib/api';
 import { authConfigured, supabase } from './lib/supabase';
 import Home from './components/Home';
 import AiAssistant from './components/AiAssistant';
@@ -218,9 +218,9 @@ export default function App() {
     setActiveTab(paymentKind === 'backmi' ? 'backmi' : 'membership');
     showToast(payment === 'success'
       ? (paymentKind === 'backmi'
-        ? (lang === 'en' ? 'PayFast returned you to BackMi. The gift will appear after secure confirmation.' : 'PayFast het jou na BackMi teruggestuur. Die geskenk sal ná veilige bevestiging verskyn.')
-        : (lang === 'en' ? 'PayFast returned you to We-Rise. We are waiting for secure payment confirmation.' : 'PayFast het jou na We-Rise teruggestuur. Ons wag vir die veilige betalingsbevestiging.'))
-      : (lang === 'en' ? 'The PayFast checkout was cancelled. No payment is recorded.' : 'Die PayFast-betaling is gekanselleer. Geen betaling is aangeteken nie.'));
+        ? (lang === 'en' ? 'Paystack returned you to BackMi. The gift will appear after secure confirmation.' : 'Paystack het jou na BackMi teruggestuur. Die geskenk sal ná veilige bevestiging verskyn.')
+        : (lang === 'en' ? 'Paystack returned you to We-Rise. We are waiting for secure payment confirmation.' : 'Paystack het jou na We-Rise teruggestuur. Ons wag vir die veilige betalingsbevestiging.'))
+      : (lang === 'en' ? 'The Paystack checkout was cancelled. No payment is recorded.' : 'Die Paystack-betaling is gekanselleer. Geen betaling is aangeteken nie.'));
     window.history.replaceState({}, document.title, window.location.pathname);
     if (payment === 'success') {
       window.setTimeout(refreshProfile, 2000);
@@ -237,8 +237,8 @@ export default function App() {
     if (params.get('billing') !== 'card-return') return;
     setActiveTab('membership');
     showToast(lang === 'en'
-      ? 'PayFast returned you to We-Rise. Your card details remain securely with PayFast.'
-      : 'PayFast het jou na We-Rise teruggestuur. Jou kaartbesonderhede bly veilig by PayFast.');
+      ? 'Paystack returned you to We-Rise. Your card details remain securely with Paystack.'
+      : 'Paystack het jou na We-Rise teruggestuur. Jou kaartbesonderhede bly veilig by Paystack.');
     window.history.replaceState({}, document.title, window.location.pathname);
     window.setTimeout(refreshProfile, 1500);
   }, [lang, refreshProfile, showToast]);
@@ -268,7 +268,7 @@ export default function App() {
         method: 'POST',
         body: JSON.stringify({ amount }),
       });
-      submitPayFastCheckout(checkout);
+      submitPaystackCheckout(checkout);
       return true;
     } catch (error) {
       if (error?.status === 401) openAuth('login');

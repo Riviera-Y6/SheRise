@@ -48,23 +48,12 @@ export function getApiBase() {
   return configuredBase;
 }
 
-export function submitPayFastCheckout(checkout) {
-  if (!checkout?.action || !checkout?.fields) throw new Error('The PayFast checkout is incomplete.');
-  const action = new URL(checkout.action);
-  if (!['https://www.payfast.co.za', 'https://sandbox.payfast.co.za'].includes(action.origin) || action.pathname !== '/eng/process') {
-    throw new Error('The PayFast checkout destination is invalid.');
+export function submitPaystackCheckout(checkout) {
+  const authorizationUrl = String(checkout?.authorization_url || '').trim();
+  if (!authorizationUrl) throw new Error('The Paystack checkout is incomplete.');
+  const destination = new URL(authorizationUrl);
+  if (destination.origin !== 'https://checkout.paystack.com') {
+    throw new Error('The Paystack checkout destination is invalid.');
   }
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = action.toString();
-  form.style.display = 'none';
-  for (const [name, value] of Object.entries(checkout.fields)) {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = name;
-    input.value = String(value ?? '');
-    form.appendChild(input);
-  }
-  document.body.appendChild(form);
-  form.submit();
+  window.location.assign(destination.toString());
 }

@@ -1,26 +1,25 @@
 import 'dotenv/config';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import sharp from 'sharp';
 import {
-  createPayFastSignature,
-  createPayFastApiSignature,
-  parsePayFastBody,
-  payFastApiTimestamp,
-  payFastApiUrl,
-  payFastCardUpdateUrl,
-  payFastProcessUrl,
-  payFastValidationUrl,
-  validationBody,
-  verifyPayFastSignature,
-  moneyString,
   checkoutReference,
+  cleanPaystackPayload,
+  createPaystackSubscription,
   dateAfterDays,
-  normalizePaymentStatus,
-} from './payfast.js';
+  disablePaystackSubscription,
+  fromSubunit,
+  fetchPaystackPlan,
+  generatePaystackManageLink,
+  initializePaystackTransaction,
+  paystackEventKey,
+  toSubunit,
+  verifyPaystackTransaction,
+  verifyPaystackWebhookSignature,
+} from './paystack.js';
 import { DEFAULT_MODEL, generateWeRiseAnswer, localAiGuard } from './gemini.js';
 
 const app = new Hono();
@@ -36,7 +35,7 @@ const MAX_SUPPORT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 const PROFILE_PHOTO_BUCKET = 'we-rise-profile-photos';
 const SUPPORT_ATTACHMENT_BUCKET = 'we-rise-support-attachments';
 const SUPPORT_CATEGORIES = new Set(['account', 'profile_photo', 'technical', 'membership_payment', 'backmi', 'community_messages', 'safety', 'other']);
-const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
+const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -45,14 +44,12 @@ const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
 const TWILIO_FROM_NUMBER = String(process.env.TWILIO_FROM_NUMBER || '').trim();
 const EMERGENCY_SMS_ENABLED = String(process.env.ENABLE_EMERGENCY_SMS || '').trim().toLowerCase() === 'true';
 const SMS_CONFIGURED = Boolean(EMERGENCY_SMS_ENABLED && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
-const PAYFAST_MODE = String(process.env.PAYFAST_MODE || 'sandbox').trim().toLowerCase() === 'live' ? 'live' : 'sandbox';
-const PAYFAST_MERCHANT_ID = String(process.env.PAYFAST_MERCHANT_ID || '').trim();
-const PAYFAST_MERCHANT_KEY = String(process.env.PAYFAST_MERCHANT_KEY || '').trim();
-const PAYFAST_PASSPHRASE = String(process.env.PAYFAST_PASSPHRASE || '').trim();
-const PAYFAST_ENABLED = String(process.env.ENABLE_PAYFAST || '').trim().toLowerCase() === 'true';
+const PAYSTACK_SECRET_KEY = String(process.env.PAYSTACK_SECRET_KEY || '').trim();
+const PAYSTACK_PLAN_CODE = String(process.env.PAYSTACK_PLAN_CODE || '').trim();
+const PAYSTACK_CURRENCY = String(process.env.PAYSTACK_CURRENCY || 'ZAR').trim().toUpperCase();
+const PAYSTACK_ENABLED = String(process.env.ENABLE_PAYSTACK || '').trim().toLowerCase() === 'true';
 const BACKMI_PAYMENTS_ENABLED = String(process.env.ENABLE_BACKMI_PAYMENTS || '').trim().toLowerCase() === 'true';
 const API_PUBLIC_URL = String(process.env.API_PUBLIC_URL || '').trim().replace(/\/$/, '');
-const PAYFAST_IP_ALLOWLIST = new Set(String(process.env.PAYFAST_IP_ALLOWLIST || '').split(',').map(value => value.trim()).filter(Boolean));
 const ADMIN_EMAILS = new Set(String(process.env.WE_RISE_ADMIN_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const BACKMI_REVIEWER_EMAILS = new Set(String(process.env.BACKMI_REVIEWER_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const SUPPORT_TO_EMAIL = String(process.env.SUPPORT_TO_EMAIL || 'request4.support@gmail.com').trim().toLowerCase();
@@ -62,8 +59,7 @@ const BREVO_API_KEY = String(process.env.BREVO_API_KEY || '').trim();
 const SUPPORT_FROM_EMAIL = String(process.env.SUPPORT_FROM_EMAIL || 'request4.support@gmail.com').trim().toLowerCase();
 const SUPPORT_FROM_NAME = String(process.env.SUPPORT_FROM_NAME || 'We-Rise Support').trim().slice(0, 80);
 const SUPPORT_EMAIL_CONFIGURED = Boolean(SUPPORT_EMAIL_ENABLED && SUPPORT_TO_EMAIL && SUPPORT_FROM_EMAIL && BREVO_API_KEY);
-const PAYFAST_CREDENTIALS_CONFIGURED = Boolean(PAYFAST_MERCHANT_ID && PAYFAST_MERCHANT_KEY && PAYFAST_PASSPHRASE);
-const PAYFAST_CONFIGURED = Boolean(PAYFAST_ENABLED && PAYFAST_CREDENTIALS_CONFIGURED);
+const PAYSTACK_CONFIGURED = Boolean(PAYSTACK_ENABLED && PAYSTACK_SECRET_KEY && PAYSTACK_PLAN_CODE && PAYSTACK_CURRENCY === 'ZAR');
 const GEMINI_ENABLED = String(process.env.ENABLE_GEMINI_AI || '').trim().toLowerCase() === 'true';
 const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
 const GEMINI_MODEL = String(process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
@@ -236,113 +232,38 @@ function publicPaymentSettings(settings) {
     subscription_grace_days: Number(settings.subscription_grace_days || 5),
     minimum_gift_zar: Number(settings.minimum_gift_zar),
     maximum_gift_zar: Number(settings.maximum_gift_zar),
-    membership_payments_enabled: Boolean(settings.membership_payments_enabled && PAYFAST_CONFIGURED),
-    backmi_gifts_enabled: Boolean(settings.backmi_gifts_enabled && PAYFAST_CONFIGURED && BACKMI_PAYMENTS_ENABLED),
-    payfast_mode: PAYFAST_MODE,
-    payfast_configured: PAYFAST_CONFIGURED,
-    subscription_management_enabled: Boolean(PAYFAST_CONFIGURED),
+    membership_payments_enabled: Boolean(settings.membership_payments_enabled && PAYSTACK_CONFIGURED),
+    backmi_gifts_enabled: Boolean(settings.backmi_gifts_enabled && PAYSTACK_CONFIGURED && BACKMI_PAYMENTS_ENABLED),
+    payment_provider: 'paystack',
+    paystack_mode: PAYSTACK_SECRET_KEY.startsWith('sk_live_') ? 'live' : 'test',
+    paystack_configured: PAYSTACK_CONFIGURED,
+    subscription_management_enabled: Boolean(PAYSTACK_CONFIGURED),
     payouts_enabled: false,
   };
 }
 
-function cleanPayFastPayload(fields) {
-  const payload = {};
-  for (const [key, value] of Object.entries(fields || {}).slice(0, 100)) {
-    if (key === 'signature') continue;
-    payload[String(key).slice(0, 100)] = String(value || '').slice(0, 1000);
-  }
-  return payload;
+function subscriptionStartIso(dateValue) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || '')) ? String(dateValue) : dateAfterDays(30);
+  return `${date}T00:00:00+02:00`;
 }
 
-function payFastClientIp(c) {
-  const forwarded = String(c.req.header('x-forwarded-for') || '').split(',')[0].trim();
-  const remote = String(c.env?.incoming?.socket?.remoteAddress || '').replace(/^::ffff:/, '');
-  return forwarded || remote;
+function paystackBillingDate(value, fallback = null) {
+  const raw = String(value || '');
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : fallback;
 }
 
-function apiOrigin(c) {
-  if (API_PUBLIC_URL) return API_PUBLIC_URL;
-  try { return new URL(c.req.url).origin; } catch { return '';
-  }
+function paystackTransactionId(data) {
+  return String(data?.id || data?.transaction?.id || data?.reference || data?.transaction?.reference || '').trim().slice(0, 120);
 }
 
-function splitName(displayName) {
-  const parts = String(displayName || '').trim().split(/\s+/).filter(Boolean);
-  return { first: parts[0] || 'We-Rise', last: parts.slice(1).join(' ') || 'Member' };
+function paystackSubscriptionCode(data) {
+  return String(data?.subscription_code || data?.subscription?.subscription_code || '').trim().slice(0, 160);
 }
 
-function signedPayFastFields(fields) {
-  return { ...fields, signature: createPayFastSignature(fields, PAYFAST_PASSPHRASE) };
+function paystackReference(data) {
+  return String(data?.reference || data?.transaction?.reference || '').trim().slice(0, 100);
 }
-
-async function validatePayFastServer(fields) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-  try {
-    const response = await fetch(payFastValidationUrl(PAYFAST_MODE), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: validationBody(fields),
-      signal: controller.signal,
-    });
-    if (!response.ok) return false;
-    return (await response.text()).trim() === 'VALID';
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function payFastSubscriptionRequest(token, action, body = null) {
-  if (!PAYFAST_CONFIGURED) throw new Error('PayFast subscription management is not configured.');
-  const timestamp = payFastApiTimestamp();
-  const signatureFields = {
-    'merchant-id': PAYFAST_MERCHANT_ID,
-    timestamp,
-    version: 'v1',
-    ...(body || {}),
-  };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch(payFastApiUrl(token, action, PAYFAST_MODE), {
-      method: action === 'fetch' ? 'GET' : action === 'update' ? 'PATCH' : 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'merchant-id': PAYFAST_MERCHANT_ID,
-        version: 'v1',
-        timestamp,
-        signature: createPayFastApiSignature(signatureFields, PAYFAST_PASSPHRASE),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || payload?.status === 'failed' || payload?.data?.response === false) {
-      const error = new Error(payload?.data?.message || payload?.status || `PayFast subscription request failed (${response.status}).`);
-      error.status = response.status;
-      throw error;
-    }
-    return payload;
-  } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('PayFast did not respond in time. Please try again.');
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function payFastEventKey(fields) {
-  const stable = [
-    fields?.pf_payment_id,
-    fields?.payment_status,
-    fields?.token,
-    fields?.m_payment_id,
-    fields?.billing_date,
-    fields?.amount_gross,
-  ].map(value => String(value || '').trim()).join('|');
-  return createHash('sha256').update(stable).digest('hex');
-}
-
 
 function communityPolicyError(value) {
   const content = String(value || '').trim();
@@ -1004,11 +925,22 @@ app.get('/api/billing/status', async (c) => {
       getPaymentSettings(),
     ]);
     if (paymentError) throw paymentError;
+
     const canManageSubscription = Boolean(
-      PAYFAST_CONFIGURED
+      PAYSTACK_CONFIGURED
       && auth.profile.payfast_subscription_token
       && !auth.profile.subscription_cancelled_at,
     );
+    let updateCardUrl = null;
+    if (canManageSubscription) {
+      try {
+        const link = await generatePaystackManageLink(PAYSTACK_SECRET_KEY, auth.profile.payfast_subscription_token);
+        updateCardUrl = String(link?.link || '').trim() || null;
+      } catch (error) {
+        console.error('Could not generate Paystack card-management link:', error?.message || error);
+      }
+    }
+
     return c.json({
       membership: auth.membership,
       profile: await safeProfileWithAvatar(auth.profile),
@@ -1026,11 +958,9 @@ app.get('/api/billing/status', async (c) => {
         amount_net_zar: payment.amount_net_zar === null ? null : Number(payment.amount_net_zar),
       })),
       subscription_actions: {
-        can_update_card: canManageSubscription,
-        can_cancel: canManageSubscription,
-        update_card_url: canManageSubscription
-          ? payFastCardUpdateUrl(auth.profile.payfast_subscription_token, `${primaryFrontendUrl}/?billing=card-return`, PAYFAST_MODE)
-          : null,
+        can_update_card: Boolean(canManageSubscription && updateCardUrl),
+        can_cancel: Boolean(canManageSubscription && auth.profile.paystack_email_token),
+        update_card_url: updateCardUrl,
       },
     });
   } catch (error) {
@@ -1044,7 +974,7 @@ app.post('/api/billing/membership/checkout', async (c) => {
     if (auth.response) return auth.response;
     const checkoutConsent = await c.req.json().catch(() => ({}));
     if (checkoutConsent?.accepted_recurring_terms !== true) {
-      return c.json({ error: 'Confirm the once-off and recurring membership terms before continuing to PayFast.', code: 'PAYMENT_CONSENT_REQUIRED' }, 400);
+      return c.json({ error: 'Confirm the once-off and recurring membership terms before continuing to Paystack.', code: 'PAYMENT_CONSENT_REQUIRED' }, 400);
     }
     if (profilePhotoRequired(auth.profile)) {
       return c.json({
@@ -1076,7 +1006,19 @@ app.post('/api/billing/membership/checkout', async (c) => {
 
     const settings = await getPaymentSettings();
     if (!settings.membership_payments_enabled) return c.json({ error: 'We-Rise membership payments are temporarily unavailable.' }, 503);
-    if (!PAYFAST_CONFIGURED) return c.json({ error: 'PayFast has not been configured on the We-Rise server yet.', code: 'PAYFAST_NOT_CONFIGURED' }, 503);
+    if (!PAYSTACK_CONFIGURED) return c.json({ error: 'Paystack has not been configured on the We-Rise server yet.', code: 'PAYSTACK_NOT_CONFIGURED' }, 503);
+
+    const plan = await fetchPaystackPlan(PAYSTACK_SECRET_KEY, PAYSTACK_PLAN_CODE);
+    const expectedMonthlySubunit = Number(toSubunit(settings.monthly_fee_zar));
+    if (String(plan?.plan_code || '') !== PAYSTACK_PLAN_CODE
+      || String(plan?.currency || '').toUpperCase() !== PAYSTACK_CURRENCY
+      || String(plan?.interval || '').toLowerCase() !== 'monthly'
+      || Number(plan?.amount) !== expectedMonthlySubunit) {
+      return c.json({
+        error: `The Paystack monthly plan does not match the We-Rise R${Number(settings.monthly_fee_zar).toFixed(2)} monthly setting. Update the Paystack test plan before checkout.`,
+        code: 'PAYSTACK_PLAN_MISMATCH',
+      }, 503);
+    }
 
     const recentCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const paymentPurpose = restartingCancelledMembership ? 'membership_recurring' : 'membership_joining';
@@ -1115,8 +1057,9 @@ app.post('/api/billing/membership/checkout', async (c) => {
           monthly_fee_zar: Number(settings.monthly_fee_zar),
           first_billing_date: firstBillingDate,
           subscription_restart: restartingCancelledMembership,
-          recurring_terms_version: '2026-09-10',
+          recurring_terms_version: '2026-09-15-paystack',
           recurring_terms_accepted_at: recurringTermsAcceptedAt,
+          paystack_plan_code: PAYSTACK_PLAN_CODE,
         },
       });
       if (error) throw error;
@@ -1124,55 +1067,53 @@ app.post('/api/billing/membership/checkout', async (c) => {
       const { error } = await supabase.from('payment_transactions').update({
         metadata: {
           ...(recent.metadata || {}),
-          recurring_terms_version: '2026-09-10',
+          recurring_terms_version: '2026-09-15-paystack',
           recurring_terms_accepted_at: recurringTermsAcceptedAt,
+          paystack_plan_code: PAYSTACK_PLAN_CODE,
         },
         updated_at: recurringTermsAcceptedAt,
       }).eq('checkout_reference', reference);
       if (error) throw error;
     }
 
-    const memberName = splitName(auth.profile.display_name);
-    const fields = signedPayFastFields({
-      merchant_id: PAYFAST_MERCHANT_ID,
-      merchant_key: PAYFAST_MERCHANT_KEY,
-      return_url: `${primaryFrontendUrl}/?payment=success&kind=membership`,
-      cancel_url: `${primaryFrontendUrl}/?payment=cancelled&kind=membership`,
-      notify_url: `${apiOrigin(c)}/api/payfast/itn`,
-      name_first: memberName.first,
-      name_last: memberName.last,
-      email_address: auth.user.email || '',
-      m_payment_id: reference,
-      amount: moneyString(initialChargeZar),
-      item_name: itemName,
-      item_description: restartingCancelledMembership ? 'Restarted monthly We-Rise membership' : 'One-time We-Rise joining fee followed by monthly membership',
-      custom_str1: paymentPurpose,
-      custom_str2: auth.memberKey,
-      subscription_type: 1,
-      billing_date: firstBillingDate,
-      recurring_amount: moneyString(monthlyFeeZar),
-      frequency: 3,
-      cycles: 0,
-      subscription_notify_email: 1,
-      subscription_notify_webhook: 0,
-      subscription_notify_buyer: 1,
+    const checkout = await initializePaystackTransaction(PAYSTACK_SECRET_KEY, {
+      email: auth.user.email || auth.profile.email || '',
+      amount: toSubunit(initialChargeZar),
+      currency: PAYSTACK_CURRENCY,
+      reference,
+      channels: ['card'],
+      callback_url: `${primaryFrontendUrl}/?payment=success&kind=membership`,
+      metadata: JSON.stringify({
+        provider: 'paystack',
+        purpose: paymentPurpose,
+        member_key: auth.memberKey,
+        item_name: itemName,
+        first_billing_date: firstBillingDate,
+        monthly_fee_zar: monthlyFeeZar,
+      }),
     });
 
-    return c.json({ action: payFastProcessUrl(PAYFAST_MODE), fields, mode: PAYFAST_MODE });
+    return c.json({
+      authorization_url: checkout?.authorization_url,
+      access_code: checkout?.access_code,
+      reference: checkout?.reference || reference,
+      mode: PAYSTACK_SECRET_KEY.startsWith('sk_live_') ? 'live' : 'test',
+    });
   } catch (error) {
     return fail(c, error);
   }
 });
 
 app.post('/api/billing/subscription/cancel', async (c) => {
-  let payFastAccepted = false;
+  let paystackAccepted = false;
   let cancellingMemberKey = null;
   let cancellingMembership = null;
   try {
     const auth = await authContext(c);
     if (auth.response) return auth.response;
-    if (!PAYFAST_CONFIGURED) return c.json({ error: 'PayFast subscription management is temporarily unavailable.' }, 503);
-    if (!auth.profile.payfast_subscription_token) return c.json({ error: 'No PayFast subscription is linked to this membership.' }, 404);
+    if (!PAYSTACK_CONFIGURED) return c.json({ error: 'Paystack subscription management is temporarily unavailable.' }, 503);
+    if (!auth.profile.payfast_subscription_token) return c.json({ error: 'No Paystack subscription is linked to this membership.' }, 404);
+    if (!auth.profile.paystack_email_token) return c.json({ error: 'This Paystack subscription is missing its management token. Please contact We-Rise Support.' }, 409);
     if (auth.profile.subscription_cancelled_at || auth.membership.status === 'cancelled') {
       return c.json({ error: 'This subscription is already cancelled.', code: 'ALREADY_CANCELLED' }, 409);
     }
@@ -1181,24 +1122,29 @@ app.post('/api/billing/subscription/cancel', async (c) => {
 
     cancellingMemberKey = auth.memberKey;
     cancellingMembership = auth.membership;
-    await payFastSubscriptionRequest(auth.profile.payfast_subscription_token, 'cancel');
-    payFastAccepted = true;
-    const eventFields = {
-      payment_status: 'CANCELLED',
-      token: auth.profile.payfast_subscription_token,
-      m_payment_id: `MEMBER-CANCEL-${auth.memberKey}`,
-    };
+    await disablePaystackSubscription(PAYSTACK_SECRET_KEY, auth.profile.payfast_subscription_token, auth.profile.paystack_email_token);
+    paystackAccepted = true;
+
     const settings = await getPaymentSettings();
-    const { data, error } = await supabase.rpc('record_payfast_status_event', {
-      p_event_key: payFastEventKey(eventFields),
+    const syntheticEvent = {
+      event: 'subscription.not_renew',
+      data: {
+        subscription_code: auth.profile.payfast_subscription_token,
+        status: 'cancelled',
+        member_key: auth.memberKey,
+        source: 'member_request',
+      },
+    };
+    const { data, error } = await supabase.rpc('record_paystack_status_event', {
+      p_event_key: paystackEventKey(syntheticEvent),
       p_member_key: auth.memberKey,
       p_transaction_id: null,
       p_purpose: 'membership_recurring',
-      p_merchant_reference: eventFields.m_payment_id,
+      p_merchant_reference: `MEMBER-CANCEL-${auth.memberKey}`,
       p_pf_payment_id: null,
       p_subscription_token: auth.profile.payfast_subscription_token,
       p_payment_status: 'cancelled',
-      p_payload: { source: 'member_request', action: 'cancel' },
+      p_payload: cleanPaystackPayload(syntheticEvent),
       p_grace_days: Number(settings.subscription_grace_days || 5),
     });
     if (error) throw error;
@@ -1212,11 +1158,11 @@ app.post('/api/billing/subscription/cancel', async (c) => {
     return c.json({
       success: true,
       membership: membershipSummary(updated),
-      message: 'Your recurring PayFast subscription has been cancelled. No further monthly charges will be requested.',
+      message: 'Your recurring Paystack subscription has been cancelled. No further monthly charges will be requested.',
     });
   } catch (error) {
-    console.error('PayFast subscription cancellation failed:', error?.message || error);
-    if (payFastAccepted && cancellingMemberKey) {
+    console.error('Paystack subscription cancellation failed:', error?.message || error);
+    if (paystackAccepted && cancellingMemberKey) {
       const now = new Date().toISOString();
       const { data: recovered } = await supabase.from('member_profiles').update({
         membership_status: 'cancelled',
@@ -1234,170 +1180,323 @@ app.post('/api/billing/subscription/cancel', async (c) => {
           status: 'cancelled',
           subscription_status: 'cancelled',
         },
-        message: 'PayFast accepted the cancellation. We-Rise is completing the local audit record.',
+        message: 'Paystack accepted the cancellation. We-Rise is completing the local audit record.',
       }, 202);
     }
-    return c.json({ error: 'We could not cancel the PayFast subscription right now. No local cancellation was recorded. Please try again or contact We-Rise Support.' }, 502);
+    return c.json({ error: 'We could not cancel the Paystack subscription right now. No local cancellation was recorded. Please try again or contact We-Rise Support.' }, 502);
   }
 });
 
-app.post('/api/payfast/itn', async (c) => {
+async function paystackMemberBySubscription(subscriptionCode) {
+  if (!subscriptionCode) return null;
+  const { data, error } = await supabase.from('member_profiles')
+    .select(PROFILE_COLUMNS)
+    .eq('payfast_subscription_token', subscriptionCode)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function recordPaystackAudit({ event, transaction, transactionId, reference, subscriptionCode, paymentStatus = 'complete' }) {
+  const { error } = await supabase.from('payment_notification_events').insert({
+    event_key: paystackEventKey(event),
+    provider: 'paystack',
+    pf_payment_id: transactionId || null,
+    subscription_token: subscriptionCode || null,
+    merchant_reference: reference || null,
+    payment_status: paymentStatus,
+    member_key: transaction?.member_key || null,
+    payment_transaction_id: transaction?.id || null,
+    payload: cleanPaystackPayload(event),
+    processing_status: 'processed',
+    processed_at: new Date().toISOString(),
+  });
+  if (error && error.code !== '23505') console.error('Could not store Paystack notification audit:', error.message);
+}
+
+async function finalizeVerifiedPaystackCharge(event, verified, knownTransaction = null, subscriptionCode = null, billingDate = null) {
+  const reference = String(verified?.reference || '').trim();
+  const transactionId = paystackTransactionId(verified);
+  const amountGross = fromSubunit(verified?.amount);
+  const amountFee = fromSubunit(verified?.fees || 0);
+  const amountNet = Math.max(0, amountGross - amountFee);
+  if (!reference || !transactionId || String(verified?.status || '').toLowerCase() !== 'success') throw new Error('Paystack transaction is not successful.');
+  if (String(verified?.currency || '').toUpperCase() !== PAYSTACK_CURRENCY) throw new Error('Paystack currency mismatch.');
+
+  let transaction = knownTransaction;
+  if (!transaction) {
+    const { data, error } = await supabase.from('payment_transactions')
+      .select('id, expected_amount_zar, purpose, member_key, status, metadata')
+      .eq('checkout_reference', reference)
+      .maybeSingle();
+    if (error) throw error;
+    transaction = data || null;
+  }
+
+  let subscriptionMember = subscriptionCode ? await paystackMemberBySubscription(subscriptionCode) : null;
+  if (!transaction && subscriptionMember) {
+    transaction = {
+      purpose: 'membership_recurring',
+      member_key: subscriptionMember.member_key,
+      expected_amount_zar: subscriptionMember.subscription_monthly_amount_zar,
+    };
+  }
+  if (!transaction) return { ignored: true };
+  if (Math.abs(Number(transaction.expected_amount_zar) - amountGross) > 0.01) throw new Error('Paystack amount mismatch.');
+
+  const { data, error } = await supabase.rpc('finalize_paystack_payment', {
+    p_merchant_reference: reference,
+    p_pf_payment_id: transactionId,
+    p_amount_gross: amountGross,
+    p_amount_fee: amountFee,
+    p_amount_net: amountNet,
+    p_subscription_token: subscriptionCode || null,
+    p_billing_date: billingDate || null,
+    p_payload: cleanPaystackPayload({ event, verified }),
+  });
+  if (error) throw error;
+  if (!data?.success) throw new Error('Paystack payment could not be finalised.');
+
+  if (transaction?.metadata?.subscription_restart) {
+    const now = new Date().toISOString();
+    const { error: restartError } = await supabase.from('member_profiles').update({
+      subscription_next_billing_date: billingDate || transaction.metadata.first_billing_date || null,
+      subscription_cancelled_at: null,
+      payfast_subscription_status: 'active',
+      subscription_status_updated_at: now,
+      updated_at: now,
+    }).eq('member_key', transaction.member_key);
+    if (restartError) throw restartError;
+  }
+
+  return { ignored: false, transaction: { ...transaction, id: data.transaction_id || transaction.id || null }, transactionId, reference };
+}
+
+app.post('/api/paystack/webhook', async (c) => {
   try {
-    if (!PAYFAST_CREDENTIALS_CONFIGURED) return c.text('PayFast is not configured', 503);
+    if (!PAYSTACK_SECRET_KEY) return c.text('Paystack is not configured', 503);
     const contentLength = Number(c.req.header('content-length') || 0);
-    if (contentLength > 65536) return c.text('Payload too large', 413);
+    if (contentLength > 262144) return c.text('Payload too large', 413);
     const rawBody = await c.req.text();
-    if (rawBody.length > 65536) return c.text('Payload too large', 413);
-    const fields = parsePayFastBody(rawBody);
+    if (rawBody.length > 262144) return c.text('Payload too large', 413);
+    const signature = c.req.header('x-paystack-signature');
+    if (!verifyPaystackWebhookSignature(PAYSTACK_SECRET_KEY, rawBody, signature)) return c.text('Invalid signature', 401);
 
-    if (PAYFAST_IP_ALLOWLIST.size) {
-      const sourceIp = payFastClientIp(c);
-      if (!sourceIp || !PAYFAST_IP_ALLOWLIST.has(sourceIp)) return c.text('Invalid source', 403);
-    }
-    if (String(fields.merchant_id || '') !== PAYFAST_MERCHANT_ID) return c.text('Invalid merchant', 400);
-    if (!verifyPayFastSignature(fields, PAYFAST_PASSPHRASE)) return c.text('Invalid signature', 400);
-    if (!(await validatePayFastServer(fields))) return c.text('Invalid PayFast notification', 400);
+    let event;
+    try { event = JSON.parse(rawBody); } catch { return c.text('Invalid JSON', 400); }
+    const eventType = String(event?.event || '').trim();
+    const eventData = event?.data || {};
 
-    const merchantReference = String(fields.m_payment_id || '').trim();
-    const subscriptionToken = String(fields.token || '').trim();
-    const pfPaymentId = String(fields.pf_payment_id || '').trim();
-    const amountGross = Number(fields.amount_gross);
-    const normalizedStatus = normalizePaymentStatus(fields.payment_status);
-    if (normalizedStatus === 'complete' && (!pfPaymentId || !Number.isFinite(amountGross) || amountGross <= 0)) {
-      return c.text('Invalid payment details', 400);
-    }
-
-    let transaction = null;
-    if (pfPaymentId && ['refunded', 'reversed'].includes(normalizedStatus)) {
-      const { data, error } = await supabase.from('payment_transactions')
+    if (eventType === 'charge.success') {
+      const reference = paystackReference(eventData);
+      if (!reference) return c.text('OK', 200);
+      const { data: transaction, error: transactionError } = await supabase.from('payment_transactions')
         .select('id, expected_amount_zar, purpose, member_key, status, metadata')
-        .eq('pf_payment_id', pfPaymentId)
+        .eq('checkout_reference', reference)
         .maybeSingle();
-      if (error) throw error;
-      transaction = data;
-    }
-    if (!transaction && merchantReference) {
-      const { data, error } = await supabase.from('payment_transactions')
-        .select('id, expected_amount_zar, purpose, member_key, status, metadata')
-        .eq('checkout_reference', merchantReference)
-        .maybeSingle();
-      if (error) throw error;
-      transaction = data;
-    }
-    if (!transaction && pfPaymentId) {
-      const { data, error } = await supabase.from('payment_transactions')
-        .select('id, expected_amount_zar, purpose, member_key, status, metadata')
-        .eq('pf_payment_id', pfPaymentId)
-        .maybeSingle();
-      if (error) throw error;
-      transaction = data;
-    }
+      if (transactionError) throw transactionError;
 
-    let subscriptionMember = null;
-    if (subscriptionToken) {
-      const { data: tokenMember, error: subscriptionError } = await supabase.from('member_profiles')
-        .select('member_key, subscription_monthly_amount_zar, payfast_subscription_token')
-        .eq('payfast_subscription_token', subscriptionToken)
-        .maybeSingle();
-      if (subscriptionError) throw subscriptionError;
-      subscriptionMember = tokenMember || null;
-    }
-    if (
-      subscriptionMember
-      && normalizedStatus === 'complete'
-      && transaction?.purpose === 'membership_joining'
-      && transaction?.status === 'complete'
-      && Math.abs(Number(subscriptionMember.subscription_monthly_amount_zar) - amountGross) <= 0.01
-    ) {
-      transaction = {
-        purpose: 'membership_recurring',
-        member_key: subscriptionMember.member_key,
-        expected_amount_zar: subscriptionMember.subscription_monthly_amount_zar,
-      };
-    }
-    if (
-      subscriptionMember
-      && ['pending', 'failed', 'cancelled'].includes(normalizedStatus)
-      && transaction?.purpose === 'membership_joining'
-      && transaction?.status === 'complete'
-    ) {
-      transaction = {
-        purpose: 'membership_recurring',
-        member_key: subscriptionMember.member_key,
-        expected_amount_zar: subscriptionMember.subscription_monthly_amount_zar,
-      };
-    }
-    if (!transaction && subscriptionMember) {
-      transaction = {
-        purpose: 'membership_recurring',
-        member_key: subscriptionMember.member_key,
-        expected_amount_zar: subscriptionMember.subscription_monthly_amount_zar,
-      };
-    }
-    if (!transaction) return c.text('Unknown payment reference', 400);
+      // Subscription recurring charges are finalised from invoice.update, where the SUB_ code is present.
+      if (!transaction) return c.text('OK', 200);
 
-    if (normalizedStatus !== 'complete') {
-      const settings = await getPaymentSettings();
-      const { data, error } = await supabase.rpc('record_payfast_status_event', {
-        p_event_key: payFastEventKey(fields),
-        p_member_key: transaction.member_key,
-        p_transaction_id: transaction.id || null,
-        p_purpose: transaction.purpose,
-        p_merchant_reference: merchantReference || null,
-        p_pf_payment_id: pfPaymentId || null,
-        p_subscription_token: subscriptionToken || null,
-        p_payment_status: normalizedStatus,
-        p_payload: cleanPayFastPayload(fields),
-        p_grace_days: Number(settings.subscription_grace_days || 5),
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error('PayFast status could not be recorded.');
+      const verified = await verifyPaystackTransaction(PAYSTACK_SECRET_KEY, reference);
+      const amountGross = fromSubunit(verified?.amount);
+      if (String(verified?.status || '').toLowerCase() !== 'success') return c.text('Transaction not successful', 400);
+      if (String(verified?.currency || '').toUpperCase() !== PAYSTACK_CURRENCY) return c.text('Currency mismatch', 400);
+      if (Math.abs(Number(transaction.expected_amount_zar) - amountGross) > 0.01) return c.text('Amount mismatch', 400);
+
+      let subscriptionCode = null;
+      let billingDate = null;
+      if (transaction.purpose === 'membership_joining' || transaction.purpose === 'membership_recurring') {
+        const { data: member, error: memberError } = await supabase.from('member_profiles')
+          .select(PROFILE_COLUMNS)
+          .eq('member_key', transaction.member_key)
+          .single();
+        if (memberError) throw memberError;
+
+        const isRestartPending = Boolean(transaction.metadata?.subscription_restart && transaction.status !== 'complete');
+        const needsSubscription = !member.payfast_subscription_token || isRestartPending;
+        if (needsSubscription) {
+          const authorizationCode = String(verified?.authorization?.authorization_code || '').trim();
+          const customerCode = String(verified?.customer?.customer_code || '').trim();
+          if (!authorizationCode || verified?.authorization?.reusable !== true) throw new Error('The Paystack card authorization is not reusable for the monthly membership.');
+          if (!customerCode && !verified?.customer?.email) throw new Error('Paystack did not return a customer code for the membership.');
+
+          const firstBillingDate = transaction.metadata?.first_billing_date || dateAfterDays(30);
+
+          // Persist the verified Paystack customer/authorization before creating the subscription.
+          // If Paystack creates the subscription but the API response is interrupted, the
+          // subscription.create webhook can still resolve this member by customer code.
+          const preSubscriptionNow = new Date().toISOString();
+          const { error: preSubscriptionSaveError } = await supabase.from('member_profiles').update({
+            paystack_customer_code: customerCode || null,
+            paystack_authorization_code: authorizationCode,
+            subscription_status_updated_at: preSubscriptionNow,
+            updated_at: preSubscriptionNow,
+          }).eq('member_key', transaction.member_key);
+          if (preSubscriptionSaveError) throw preSubscriptionSaveError;
+
+          const created = await createPaystackSubscription(PAYSTACK_SECRET_KEY, {
+            customer: customerCode || verified.customer.email,
+            plan: PAYSTACK_PLAN_CODE,
+            authorization: authorizationCode,
+            start_date: subscriptionStartIso(firstBillingDate),
+          });
+          subscriptionCode = String(created?.subscription_code || '').trim();
+          const emailToken = String(created?.email_token || '').trim();
+          if (!subscriptionCode || !emailToken) throw new Error('Paystack created the membership without subscription management details.');
+          billingDate = paystackBillingDate(created?.next_payment_date, firstBillingDate);
+
+          const now = new Date().toISOString();
+          const { error: saveError } = await supabase.from('member_profiles').update({
+            paystack_customer_code: customerCode || null,
+            paystack_authorization_code: authorizationCode,
+            paystack_email_token: emailToken,
+            payfast_subscription_token: subscriptionCode,
+            payfast_subscription_status: String(created?.status || 'active').toLowerCase(),
+            subscription_status_updated_at: now,
+            updated_at: now,
+          }).eq('member_key', transaction.member_key);
+          if (saveError) throw saveError;
+        } else {
+          subscriptionCode = member.payfast_subscription_token;
+          billingDate = transaction.metadata?.first_billing_date || member.subscription_next_billing_date || null;
+        }
+      }
+
+      const result = await finalizeVerifiedPaystackCharge(event, verified, transaction, subscriptionCode, billingDate);
+      if (!result.ignored) await recordPaystackAudit({ event, transaction: result.transaction, transactionId: result.transactionId, reference: result.reference, subscriptionCode });
       return c.text('OK', 200);
     }
 
-    if (Math.abs(Number(transaction.expected_amount_zar) - amountGross) > 0.01) return c.text('Amount mismatch', 400);
-
-    const billingDate = /^\d{4}-\d{2}-\d{2}$/.test(String(fields.billing_date || '')) ? fields.billing_date : null;
-    const { data, error } = await supabase.rpc('finalize_payfast_payment', {
-      p_merchant_reference: merchantReference || null,
-      p_pf_payment_id: pfPaymentId,
-      p_amount_gross: amountGross,
-      p_amount_fee: Number(fields.amount_fee || 0),
-      p_amount_net: Number(fields.amount_net || 0) || null,
-      p_subscription_token: subscriptionToken || null,
-      p_billing_date: billingDate,
-      p_payload: cleanPayFastPayload(fields),
-    });
-    if (error) throw error;
-    if (!data?.success) throw new Error('PayFast payment could not be finalised.');
-
-    if (transaction?.metadata?.subscription_restart) {
-      const { error: restartError } = await supabase.from('member_profiles').update({
-        subscription_next_billing_date: billingDate || transaction.metadata.first_billing_date || null,
-        subscription_cancelled_at: null,
-        payfast_subscription_status: 'active',
-        subscription_status_updated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq('member_key', transaction.member_key);
-      if (restartError) throw restartError;
+    if (eventType === 'invoice.update' && (eventData?.paid === true || Number(eventData?.paid) === 1) && String(eventData?.transaction?.status || '').toLowerCase() === 'success') {
+      const reference = paystackReference(eventData);
+      const subscriptionCode = paystackSubscriptionCode(eventData);
+      if (!reference || !subscriptionCode) return c.text('OK', 200);
+      const verified = await verifyPaystackTransaction(PAYSTACK_SECRET_KEY, reference);
+      const billingDate = paystackBillingDate(eventData?.period_start || eventData?.paid_at || verified?.paid_at, null);
+      const result = await finalizeVerifiedPaystackCharge(event, verified, null, subscriptionCode, billingDate);
+      if (!result.ignored) {
+        const member = await paystackMemberBySubscription(subscriptionCode);
+        if (member) {
+          const now = new Date().toISOString();
+          const nextBilling = paystackBillingDate(eventData?.subscription?.next_payment_date, null);
+          const { error: updateError } = await supabase.from('member_profiles').update({
+            paystack_customer_code: String(eventData?.customer?.customer_code || member.paystack_customer_code || '').trim() || null,
+            paystack_authorization_code: String(eventData?.authorization?.authorization_code || member.paystack_authorization_code || '').trim() || null,
+            paystack_email_token: String(eventData?.subscription?.email_token || member.paystack_email_token || '').trim() || null,
+            payfast_subscription_status: String(eventData?.subscription?.status || 'active').toLowerCase(),
+            ...(nextBilling ? { subscription_next_billing_date: nextBilling } : {}),
+            subscription_status_updated_at: now,
+            updated_at: now,
+          }).eq('member_key', member.member_key);
+          if (updateError) throw updateError;
+        }
+        await recordPaystackAudit({ event, transaction: result.transaction, transactionId: result.transactionId, reference: result.reference, subscriptionCode });
+      }
+      return c.text('OK', 200);
     }
 
-    const { error: auditError } = await supabase.from('payment_notification_events').insert({
-      event_key: payFastEventKey(fields),
-      pf_payment_id: pfPaymentId,
-      subscription_token: subscriptionToken || null,
-      merchant_reference: merchantReference || null,
-      payment_status: 'complete',
-      member_key: transaction.member_key,
-      payment_transaction_id: data.transaction_id || transaction.id || null,
-      payload: cleanPayFastPayload(fields),
-      processing_status: 'processed',
-      processed_at: new Date().toISOString(),
-    });
-    if (auditError && auditError.code !== '23505') console.error('Could not store PayFast notification audit:', auditError.message);
+    if (eventType === 'invoice.payment_failed') {
+      const subscriptionCode = paystackSubscriptionCode(eventData);
+      const member = await paystackMemberBySubscription(subscriptionCode);
+      if (!member) return c.text('OK', 200);
+      const settings = await getPaymentSettings();
+      const { data, error } = await supabase.rpc('record_paystack_status_event', {
+        p_event_key: paystackEventKey(event),
+        p_member_key: member.member_key,
+        p_transaction_id: null,
+        p_purpose: 'membership_recurring',
+        p_merchant_reference: paystackReference(eventData) || null,
+        p_pf_payment_id: paystackTransactionId(eventData) || null,
+        p_subscription_token: subscriptionCode,
+        p_payment_status: 'failed',
+        p_payload: cleanPaystackPayload(event),
+        p_grace_days: Number(settings.subscription_grace_days || 5),
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error('Paystack failed-payment status could not be recorded.');
+      return c.text('OK', 200);
+    }
+
+    if (eventType === 'subscription.create') {
+      const subscriptionCode = paystackSubscriptionCode(eventData);
+      const customerCode = String(eventData?.customer?.customer_code || '').trim();
+      let query = null;
+      if (subscriptionCode) query = supabase.from('member_profiles').select(PROFILE_COLUMNS).eq('payfast_subscription_token', subscriptionCode).maybeSingle();
+      else if (customerCode) query = supabase.from('member_profiles').select(PROFILE_COLUMNS).eq('paystack_customer_code', customerCode).maybeSingle();
+      if (query) {
+        const { data: member, error } = await query;
+        if (error) throw error;
+        if (member) {
+          const now = new Date().toISOString();
+          const { error: updateError } = await supabase.from('member_profiles').update({
+            payfast_subscription_token: subscriptionCode || member.payfast_subscription_token,
+            paystack_customer_code: customerCode || member.paystack_customer_code,
+            paystack_authorization_code: String(eventData?.authorization?.authorization_code || member.paystack_authorization_code || '').trim() || null,
+            paystack_email_token: String(eventData?.email_token || member.paystack_email_token || '').trim() || null,
+            payfast_subscription_status: String(eventData?.status || 'active').toLowerCase(),
+            subscription_status_updated_at: now,
+            updated_at: now,
+          }).eq('member_key', member.member_key);
+          if (updateError) throw updateError;
+        }
+      }
+      return c.text('OK', 200);
+    }
+
+    if (eventType === 'subscription.not_renew' || eventType === 'subscription.disable') {
+      const subscriptionCode = paystackSubscriptionCode(eventData);
+      const member = await paystackMemberBySubscription(subscriptionCode);
+      if (!member) return c.text('OK', 200);
+      const settings = await getPaymentSettings();
+      const { data, error } = await supabase.rpc('record_paystack_status_event', {
+        p_event_key: paystackEventKey(event),
+        p_member_key: member.member_key,
+        p_transaction_id: null,
+        p_purpose: 'membership_recurring',
+        p_merchant_reference: null,
+        p_pf_payment_id: null,
+        p_subscription_token: subscriptionCode,
+        p_payment_status: 'cancelled',
+        p_payload: cleanPaystackPayload(event),
+        p_grace_days: Number(settings.subscription_grace_days || 5),
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error('Paystack cancellation status could not be recorded.');
+      return c.text('OK', 200);
+    }
+
+    if (eventType === 'refund.processed') {
+      const reference = paystackReference(eventData);
+      if (!reference) return c.text('OK', 200);
+      const { data: transaction, error: txError } = await supabase.from('payment_transactions')
+        .select('id, purpose, member_key, pf_payment_id')
+        .eq('provider_merchant_reference', reference)
+        .maybeSingle();
+      if (txError) throw txError;
+      if (!transaction) return c.text('OK', 200);
+      const settings = await getPaymentSettings();
+      const { data, error } = await supabase.rpc('record_paystack_status_event', {
+        p_event_key: paystackEventKey(event),
+        p_member_key: transaction.member_key,
+        p_transaction_id: transaction.id,
+        p_purpose: transaction.purpose,
+        p_merchant_reference: reference,
+        p_pf_payment_id: transaction.pf_payment_id || null,
+        p_subscription_token: null,
+        p_payment_status: 'refunded',
+        p_payload: cleanPaystackPayload(event),
+        p_grace_days: Number(settings.subscription_grace_days || 5),
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error('Paystack refund status could not be recorded.');
+      return c.text('OK', 200);
+    }
+
     return c.text('OK', 200);
   } catch (error) {
-    console.error('PayFast ITN failed', error);
+    console.error('Paystack webhook failed:', error?.message || error);
     return c.text('Payment verification failed', 500);
   }
 });
@@ -1763,7 +1862,7 @@ app.post('/api/backmi/requests/:id/gift-checkout', async (c) => {
     if (!settings.backmi_gifts_enabled || !BACKMI_PAYMENTS_ENABLED) {
       return c.json({ error: 'BackMi gifts remain closed until the payment and payout model has been approved.', code: 'BACKMI_GIFTS_DISABLED' }, 503);
     }
-    if (!PAYFAST_CONFIGURED) return c.json({ error: 'PayFast has not been configured on the We-Rise server yet.' }, 503);
+    if (!PAYSTACK_CONFIGURED) return c.json({ error: 'Paystack has not been configured on the We-Rise server yet.' }, 503);
     if (!Number.isFinite(numericAmount) || numericAmount < Number(settings.minimum_gift_zar) || numericAmount > Number(settings.maximum_gift_zar)) {
       return c.json({ error: `Choose a gift from R${Number(settings.minimum_gift_zar)} to R${Number(settings.maximum_gift_zar)}.` }, 400);
     }
@@ -1788,29 +1887,30 @@ app.post('/api/backmi/requests/:id/gift-checkout', async (c) => {
       expected_amount_zar: numericAmount,
       item_name: `BackMi gift ${request.request_code}`.slice(0, 120),
       status: 'pending',
-      metadata: { request_code: request.request_code, maturity_date: request.maturity_date },
+      metadata: { request_code: request.request_code, maturity_date: request.maturity_date, provider: 'paystack' },
     });
     if (transactionError) throw transactionError;
 
-    const memberName = splitName(auth.profile.display_name);
-    const fields = signedPayFastFields({
-      merchant_id: PAYFAST_MERCHANT_ID,
-      merchant_key: PAYFAST_MERCHANT_KEY,
-      return_url: `${primaryFrontendUrl}/?payment=success&kind=backmi&request=${encodeURIComponent(request.request_code)}`,
-      cancel_url: `${primaryFrontendUrl}/?payment=cancelled&kind=backmi&request=${encodeURIComponent(request.request_code)}`,
-      notify_url: `${apiOrigin(c)}/api/payfast/itn`,
-      name_first: memberName.first,
-      name_last: memberName.last,
-      email_address: auth.user.email || '',
-      m_payment_id: reference,
-      amount: moneyString(numericAmount),
-      item_name: `Voluntary BackMi gift ${request.request_code}`.slice(0, 100),
-      item_description: `Voluntary gift to approved request ${request.request_code}`.slice(0, 255),
-      custom_str1: 'backmi_gift',
-      custom_str2: auth.memberKey,
-      custom_str3: request.request_code,
+    const checkout = await initializePaystackTransaction(PAYSTACK_SECRET_KEY, {
+      email: auth.user.email || auth.profile.email || '',
+      amount: toSubunit(numericAmount),
+      currency: PAYSTACK_CURRENCY,
+      reference,
+      callback_url: `${primaryFrontendUrl}/?payment=success&kind=backmi&request=${encodeURIComponent(request.request_code)}`,
+      metadata: JSON.stringify({
+        provider: 'paystack',
+        purpose: 'backmi_gift',
+        member_key: auth.memberKey,
+        request_code: request.request_code,
+      }),
     });
-    return c.json({ action: payFastProcessUrl(PAYFAST_MODE), fields, mode: PAYFAST_MODE });
+
+    return c.json({
+      authorization_url: checkout?.authorization_url,
+      access_code: checkout?.access_code,
+      reference: checkout?.reference || reference,
+      mode: PAYSTACK_SECRET_KEY.startsWith('sk_live_') ? 'live' : 'test',
+    });
   } catch (error) {
     return fail(c, error);
   }

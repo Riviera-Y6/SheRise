@@ -20,20 +20,16 @@ services:
         value: "false"
       - key: API_PUBLIC_URL
         value: https://werise-api.onrender.com
-      - key: PAYFAST_MODE
-        value: sandbox
-      - key: ENABLE_PAYFAST
+      - key: ENABLE_PAYSTACK
         value: "false"
-      - key: PAYFAST_MERCHANT_ID
+      - key: PAYSTACK_SECRET_KEY
         sync: false
-      - key: PAYFAST_MERCHANT_KEY
+      - key: PAYSTACK_PLAN_CODE
         sync: false
-      - key: PAYFAST_PASSPHRASE
-        sync: false
+      - key: PAYSTACK_CURRENCY
+        value: ZAR
       - key: ENABLE_BACKMI_PAYMENTS
         value: "false"
-      - key: PAYFAST_IP_ALLOWLIST
-        sync: false
       - key: ENABLE_GEMINI_AI
         value: "false"
       - key: GEMINI_API_KEY

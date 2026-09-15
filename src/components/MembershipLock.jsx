@@ -17,7 +17,7 @@ export default function MembershipLock({ lang, feature, membership, onMembership
           ? 'Your membership needs attention before this feature can be used.'
           : 'Jou lidmaatskap kort aandag voordat hierdie funksie gebruik kan word.')}</p>
         <div className="membership-lock-points">
-          <span><HiShieldCheck /> {lang === 'en' ? 'Secure PayFast checkout' : 'Veilige PayFast-betaling'}</span>
+          <span><HiShieldCheck /> {lang === 'en' ? 'Secure Paystack checkout' : 'Veilige Paystack-betaling'}</span>
           <span><HiHeart /> {lang === 'en' ? 'Monthly BackMi foundation allocation included' : 'Maandelikse BackMi-fondstoewysing ingesluit'}</span>
         </div>
         <button className="btn btn-primary" onClick={onMembership}>

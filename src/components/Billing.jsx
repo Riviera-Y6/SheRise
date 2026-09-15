@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { HiCheckCircle, HiClock, HiCreditCard, HiExternalLink, HiHeart, HiRefresh, HiShieldCheck, HiXCircle } from 'react-icons/hi';
-import { apiRequest, submitPayFastCheckout } from '../lib/api';
+import { apiRequest, submitPaystackCheckout } from '../lib/api';
 
 const money = value => `R${Number(value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = value => value ? new Date(value).toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
@@ -49,9 +49,9 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
         method: 'POST',
         body: JSON.stringify({ accepted_recurring_terms: paymentConsent }),
       });
-      submitPayFastCheckout(checkout);
+      submitPaystackCheckout(checkout);
     } catch (error) {
-      showToast(error?.message || (lang === 'en' ? 'PayFast checkout could not start.' : 'PayFast-betaling kon nie begin nie.'));
+      showToast(error?.message || (lang === 'en' ? 'Paystack checkout could not start.' : 'Paystack-betaling kon nie begin nie.'));
       setPaying(false);
     }
   };
@@ -72,8 +72,8 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
 
   const cancelSubscription = async () => {
     const confirmed = window.confirm(lang === 'en'
-      ? 'Cancel your recurring We-Rise membership? PayFast will stop future monthly charges. This cannot be undone from this screen.'
-      : 'Kanselleer jou herhalende We-Rise-lidmaatskap? PayFast sal toekomstige maandelikse betalings stop. Dit kan nie vanaf hierdie skerm ongedaan gemaak word nie.');
+      ? 'Cancel your recurring We-Rise membership? Paystack will stop future monthly charges. This cannot be undone from this screen.'
+      : 'Kanselleer jou herhalende We-Rise-lidmaatskap? Paystack sal toekomstige maandelikse betalings stop. Dit kan nie vanaf hierdie skerm ongedaan gemaak word nie.');
     if (!confirmed) return;
     setCancelling(true);
     try {
@@ -87,7 +87,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
         subscription_actions: { can_update_card: false, can_cancel: false, update_card_url: null },
       }));
       await onRefreshProfile?.();
-      showToast(lang === 'en' ? 'Your recurring PayFast subscription is cancelled.' : 'Jou herhalende PayFast-intekening is gekanselleer.');
+      showToast(lang === 'en' ? 'Your recurring Paystack subscription is cancelled.' : 'Jou herhalende Paystack-intekening is gekanselleer.');
     } catch (error) {
       showToast(error?.message || (lang === 'en' ? 'The subscription could not be cancelled.' : 'Die intekening kon nie gekanselleer word nie.'));
     } finally {
@@ -159,31 +159,31 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
           <div>
             <strong>{canRestart
               ? (lang === 'en' ? 'Restart monthly membership securely' : 'Begin maandelikse lidmaatskap weer veilig')
-              : (lang === 'en' ? 'Complete membership securely with PayFast' : 'Voltooi lidmaatskap veilig met PayFast')}</strong>
+              : (lang === 'en' ? 'Complete membership securely with Paystack' : 'Voltooi lidmaatskap veilig met Paystack')}</strong>
             <p>{canRestart
               ? (lang === 'en'
                 ? `Your once-off joining fee remains paid. Restart for ${money(settings.monthly_fee_zar)} now, followed by the same monthly amount.`
                 : `Jou eenmalige aansluitingsfooi bly betaal. Begin weer vir ${money(settings.monthly_fee_zar)} nou, gevolg deur dieselfde maandelikse bedrag.`)
               : (lang === 'en'
-                ? `${money(settings.joining_fee_zar)} once, followed by ${money(settings.monthly_fee_zar)} per month. The first recurring date is shown by PayFast before confirmation.`
-                : `${money(settings.joining_fee_zar)} eenmalig, gevolg deur ${money(settings.monthly_fee_zar)} per maand. PayFast wys die eerste herhalende datum voor bevestiging.`)}</p>
+                ? `${money(settings.joining_fee_zar)} once, followed by ${money(settings.monthly_fee_zar)} per month. The first recurring charge is scheduled ${Number(settings.first_recurring_delay_days || 30)} days after joining.`
+                : `${money(settings.joining_fee_zar)} eenmalig, gevolg deur ${money(settings.monthly_fee_zar)} per maand. Die eerste herhalende betaling word ${Number(settings.first_recurring_delay_days || 30)} dae ná aansluiting geskeduleer.`)}</p>
           </div>
           <label className="membership-payment-consent">
             <input type="checkbox" checked={paymentConsent} onChange={event => setPaymentConsent(event.target.checked)} />
             <span>{canRestart
               ? (lang === 'en'
-                ? `I agree to pay ${money(settings.monthly_fee_zar)} now and monthly through PayFast until I cancel.`
-                : `Ek stem in om ${money(settings.monthly_fee_zar)} nou en maandeliks deur PayFast te betaal totdat ek kanselleer.`)
+                ? `I agree to pay ${money(settings.monthly_fee_zar)} now and monthly through Paystack until I cancel.`
+                : `Ek stem in om ${money(settings.monthly_fee_zar)} nou en maandeliks deur Paystack te betaal totdat ek kanselleer.`)
               : (lang === 'en'
-                ? `I agree to the ${money(settings.joining_fee_zar)} once-off fee and ${money(settings.monthly_fee_zar)} monthly PayFast payment until I cancel.`
-                : `Ek stem in tot die eenmalige ${money(settings.joining_fee_zar)}-fooi en ${money(settings.monthly_fee_zar)} maandelikse PayFast-betaling totdat ek kanselleer.`)}</span>
+                ? `I agree to the ${money(settings.joining_fee_zar)} once-off fee and ${money(settings.monthly_fee_zar)} monthly Paystack payment until I cancel.`
+                : `Ek stem in tot die eenmalige ${money(settings.joining_fee_zar)}-fooi en ${money(settings.monthly_fee_zar)} maandelikse Paystack-betaling totdat ek kanselleer.`)}</span>
           </label>
           <button className="btn btn-primary" onClick={startCheckout} disabled={paying || !settings.membership_payments_enabled || !paymentConsent}>
             <HiCreditCard /> {paying
-              ? (lang === 'en' ? 'Opening PayFast...' : 'Maak PayFast oop...')
+              ? (lang === 'en' ? 'Opening Paystack...' : 'Maak Paystack oop...')
               : canRestart
-                ? (lang === 'en' ? 'Restart on PayFast' : 'Begin weer op PayFast')
-                : (lang === 'en' ? 'Continue to PayFast' : 'Gaan voort na PayFast')}
+                ? (lang === 'en' ? 'Restart on Paystack' : 'Begin weer op Paystack')
+                : (lang === 'en' ? 'Continue to Paystack' : 'Gaan voort na Paystack')}
           </button>
           {!settings.membership_payments_enabled && <small className="payment-disabled-note">{lang === 'en' ? 'Payments are not enabled on the server yet.' : 'Betalings is nog nie op die bediener geaktiveer nie.'}</small>}
         </div>
@@ -196,13 +196,13 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
             ? (lang === 'en' ? 'Future monthly charges are cancelled' : 'Toekomstige maandelikse betalings is gekanselleer')
             : (lang === 'en' ? 'Your joining payment is already recorded' : 'Jou aansluitingsbetaling is reeds aangeteken')}</strong><p>{cancelledWithAccess
               ? (lang === 'en' ? `Your We-Rise access remains available until ${dateText(current.access_ends_at)}.` : `Jou We-Rise-toegang bly beskikbaar tot ${dateText(current.access_ends_at)}.`)
-              : (lang === 'en' ? 'Do not pay the joining fee again. Update your PayFast card details below, or contact We-Rise Support if the status does not change.' : 'Moenie die aansluitingsfooi weer betaal nie. Dateer jou PayFast-kaartbesonderhede hieronder op, of kontak We-Rise-ondersteuning indien die status nie verander nie.')}</p></div>
+              : (lang === 'en' ? 'Do not pay the joining fee again. Update your Paystack card details below, or contact We-Rise Support if the status does not change.' : 'Moenie die aansluitingsfooi weer betaal nie. Dateer jou Paystack-kaartbesonderhede hieronder op, of kontak We-Rise-ondersteuning indien die status nie verander nie.')}</p></div>
         </div>
       )}
 
       <div className="billing-principles">
         <span><HiHeart /> {lang === 'en' ? 'BackMi remains a We-Rise benefit with no separate subscription.' : 'BackMi bly ’n We-Rise-voordeel sonder ’n aparte intekening.'}</span>
-        <span><HiShieldCheck /> {lang === 'en' ? 'Only PayFast-confirmed payments are recorded as successful.' : 'Slegs betalings wat PayFast bevestig, word as suksesvol aangeteken.'}</span>
+        <span><HiShieldCheck /> {lang === 'en' ? 'Only Paystack-confirmed payments are recorded as successful.' : 'Slegs betalings wat Paystack bevestig, word as suksesvol aangeteken.'}</span>
       </div>
 
       {(data?.subscription_actions?.can_update_card || data?.subscription_actions?.can_cancel) && (
@@ -210,13 +210,13 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
           <div>
             <h3>{lang === 'en' ? 'Manage recurring membership' : 'Bestuur herhalende lidmaatskap'}</h3>
             <p>{lang === 'en'
-              ? 'Card details are updated securely on PayFast. We-Rise never receives or stores your card number.'
-              : 'Kaartbesonderhede word veilig op PayFast opgedateer. We-Rise ontvang of stoor nooit jou kaartnommer nie.'}</p>
+              ? 'Card details are updated securely on Paystack. We-Rise never receives or stores your card number.'
+              : 'Kaartbesonderhede word veilig op Paystack opgedateer. We-Rise ontvang of stoor nooit jou kaartnommer nie.'}</p>
           </div>
           <div className="billing-subscription-actions">
             {data.subscription_actions.can_update_card && (
               <a className="btn btn-secondary" href={data.subscription_actions.update_card_url}>
-                <HiExternalLink /> {lang === 'en' ? 'Update card on PayFast' : 'Dateer kaart op PayFast op'}
+                <HiExternalLink /> {lang === 'en' ? 'Update card on Paystack' : 'Dateer kaart op Paystack op'}
               </a>
             )}
             {data.subscription_actions.can_cancel && (
@@ -263,7 +263,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
             ].map(([key, label]) => <label key={key}>{label}<input className="input" type="number" min="0" step="0.01" value={adminSettings[key] ?? ''} onChange={event => updateAdmin(key, Number(event.target.value))} /></label>)}
             <label>{lang === 'en' ? 'Allocation method' : 'Toewysingsmetode'}<select className="input" value={adminSettings.backmi_allocation_mode} onChange={event => updateAdmin('backmi_allocation_mode', event.target.value)}><option value="fixed">{lang === 'en' ? 'Fixed amount' : 'Vaste bedrag'}</option><option value="percentage">{lang === 'en' ? 'Percentage' : 'Persentasie'}</option></select></label>
             <label>{lang === 'en' ? 'Allocation percentage' : 'Toewysingspersentasie'}<input className="input" type="number" min="0" max="100" step="0.1" value={adminSettings.backmi_allocation_percentage ?? 20} onChange={event => updateAdmin('backmi_allocation_percentage', Number(event.target.value))} /></label>
-            <label>{lang === 'en' ? 'Allocation basis' : 'Toewysingsbasis'}<select className="input" value={adminSettings.allocation_fee_basis || 'gross'} onChange={event => updateAdmin('allocation_fee_basis', event.target.value)}><option value="gross">{lang === 'en' ? 'Gross payment' : 'Bruto betaling'}</option><option value="net">{lang === 'en' ? 'After PayFast fee' : 'Ná PayFast-fooi'}</option></select></label>
+            <label>{lang === 'en' ? 'Allocation basis' : 'Toewysingsbasis'}<select className="input" value={adminSettings.allocation_fee_basis || 'gross'} onChange={event => updateAdmin('allocation_fee_basis', event.target.value)}><option value="gross">{lang === 'en' ? 'Gross payment' : 'Bruto betaling'}</option><option value="net">{lang === 'en' ? 'After Paystack fee' : 'Ná Paystack-fooi'}</option></select></label>
             <label className="admin-toggle"><input type="checkbox" checked={Boolean(adminSettings.membership_payments_enabled)} onChange={event => updateAdmin('membership_payments_enabled', event.target.checked)} /> {lang === 'en' ? 'Membership checkouts enabled' : 'Lidmaatskapbetalings geaktiveer'}</label>
             <label className="admin-toggle"><input type="checkbox" checked={Boolean(adminSettings.backmi_gifts_enabled)} onChange={event => updateAdmin('backmi_gifts_enabled', event.target.checked)} /> {lang === 'en' ? 'BackMi gift checkouts enabled' : 'BackMi-geskenkbetalings geaktiveer'}</label>
           </div>
