@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HiCash, HiCheck, HiInformationCircle, HiLink, HiPlus, HiShare, HiTag } from 'react-icons/hi';
+import { HiCalculator, HiCash, HiCheck, HiInformationCircle, HiLink, HiPlus, HiShare, HiTag } from 'react-icons/hi';
 
 export default function ResellProgram({ t, lang, showToast }) {
   const [copied, setCopied] = useState(false);
@@ -101,6 +101,16 @@ export default function ResellProgram({ t, lang, showToast }) {
         <button className="btn btn-primary btn-full" onClick={handleShare}>
           <HiShare /> {lang === 'en' ? 'Share your Reseller link' : 'Deel jou Reseller-skakel'}
         </button>
+
+        <a
+          className="btn btn-secondary btn-full"
+          href="https://we-rise-calculator.pages.dev/"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ marginTop: 10, textDecoration: 'none' }}
+        >
+          <HiCalculator /> {lang === 'en' ? 'We-Rise Calculator' : 'We-Rise Sakrekenaar'}
+        </a>
       </article>
 
       <article className="card reseller-model-card">
