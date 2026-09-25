@@ -50,6 +50,7 @@ const PAYSTACK_CURRENCY = String(process.env.PAYSTACK_CURRENCY || 'ZAR').trim().
 const PAYSTACK_ENABLED = String(process.env.ENABLE_PAYSTACK || '').trim().toLowerCase() === 'true';
 const BACKMI_PAYMENTS_ENABLED = String(process.env.ENABLE_BACKMI_PAYMENTS || '').trim().toLowerCase() === 'true';
 const API_PUBLIC_URL = String(process.env.API_PUBLIC_URL || '').trim().replace(/\/$/, '');
+const OWNER_EMAILS = new Set(String(process.env.WE_RISE_OWNER_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const ADMIN_EMAILS = new Set(String(process.env.WE_RISE_ADMIN_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const BACKMI_REVIEWER_EMAILS = new Set(String(process.env.BACKMI_REVIEWER_EMAILS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean));
 const SUPPORT_TO_EMAIL = String(process.env.SUPPORT_TO_EMAIL || 'request4.support@gmail.com').trim().toLowerCase();
@@ -59,6 +60,11 @@ const BREVO_API_KEY = String(process.env.BREVO_API_KEY || '').trim();
 const SUPPORT_FROM_EMAIL = String(process.env.SUPPORT_FROM_EMAIL || 'request4.support@gmail.com').trim().toLowerCase();
 const SUPPORT_FROM_NAME = String(process.env.SUPPORT_FROM_NAME || 'We-Rise Support').trim().slice(0, 80);
 const SUPPORT_EMAIL_CONFIGURED = Boolean(SUPPORT_EMAIL_ENABLED && SUPPORT_TO_EMAIL && SUPPORT_FROM_EMAIL && BREVO_API_KEY);
+const VAPID_PUBLIC_KEY = String(process.env.VAPID_PUBLIC_KEY || '').trim();
+const VAPID_PRIVATE_KEY = String(process.env.VAPID_PRIVATE_KEY || '').trim();
+const VAPID_SUBJECT = String(process.env.VAPID_SUBJECT || `mailto:${SUPPORT_FROM_EMAIL}`).trim();
+const ADMIN_PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && /^(mailto:|https:\/\/)/i.test(VAPID_SUBJECT));
+let webPushClientPromise = null;
 const PAYSTACK_CONFIGURED = Boolean(PAYSTACK_ENABLED && PAYSTACK_SECRET_KEY && PAYSTACK_PLAN_CODE && PAYSTACK_CURRENCY === 'ZAR');
 const GEMINI_ENABLED = String(process.env.ENABLE_GEMINI_AI || '').trim().toLowerCase() === 'true';
 const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
@@ -118,13 +124,18 @@ function cleanPhone(value) {
 
 function configuredRole(email) {
   const normalized = String(email || '').trim().toLowerCase();
+  if (OWNER_EMAILS.has(normalized)) return 'owner';
   if (ADMIN_EMAILS.has(normalized)) return 'admin';
   if (BACKMI_REVIEWER_EMAILS.has(normalized)) return 'backmi_reviewer';
   return 'member';
 }
 
+function isAdmin(profile) {
+  return profile?.role === 'owner' || profile?.role === 'admin';
+}
+
 function isReviewer(profile) {
-  return profile?.role === 'admin' || profile?.role === 'backmi_reviewer';
+  return isAdmin(profile) || profile?.role === 'backmi_reviewer';
 }
 
 function membershipSummary(profile) {
@@ -408,9 +419,108 @@ async function memberAccessContext(c) {
 async function reviewerContext(c, adminOnly = false) {
   const auth = await authContext(c);
   if (auth.response) return auth;
-  const allowed = adminOnly ? auth.profile.role === 'admin' : isReviewer(auth.profile);
-  if (!allowed) return { ...auth, response: c.json({ error: 'BackMi reviewer access is required.', code: 'REVIEWER_REQUIRED' }, 403) };
+  const allowed = adminOnly ? isAdmin(auth.profile) : isReviewer(auth.profile);
+  if (!allowed) return { ...auth, response: c.json({ error: adminOnly ? 'We-Rise admin access is required.' : 'BackMi reviewer access is required.', code: adminOnly ? 'ADMIN_REQUIRED' : 'REVIEWER_REQUIRED' }, 403) };
   return auth;
+}
+
+async function adminContext(c) {
+  const auth = await authContext(c);
+  if (auth.response) return auth;
+  if (!isAdmin(auth.profile)) return { ...auth, response: c.json({ error: 'We-Rise admin access is required.', code: 'ADMIN_REQUIRED' }, 403) };
+  return auth;
+}
+
+async function recordAdminAudit(auth, action, targetType = null, targetKey = null, metadata = {}) {
+  try {
+    const { error } = await supabase.from('admin_audit_log').insert({
+      actor_member_key: auth?.memberKey || null,
+      actor_email: String(auth?.user?.email || '').trim().toLowerCase().slice(0, 320) || null,
+      actor_role: String(auth?.profile?.role || 'admin').slice(0, 30),
+      action: String(action || 'admin_action').slice(0, 80),
+      target_type: targetType ? String(targetType).slice(0, 60) : null,
+      target_key: targetKey ? String(targetKey).slice(0, 180) : null,
+      metadata: metadata && typeof metadata === 'object' ? metadata : {},
+    });
+    if (error) console.error('Could not write admin audit log:', error.message);
+  } catch (error) {
+    console.error('Could not write admin audit log:', error?.message || error);
+  }
+}
+
+async function getWebPushClient() {
+  if (!ADMIN_PUSH_CONFIGURED) return null;
+  if (!webPushClientPromise) {
+    webPushClientPromise = import('web-push').then((module) => {
+      const client = module.default || module;
+      client.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+      return client;
+    });
+  }
+  return webPushClientPromise;
+}
+
+async function sendAdminPush(notification) {
+  if (!ADMIN_PUSH_CONFIGURED || !notification?.id) return;
+  try {
+    const client = await getWebPushClient();
+    if (!client) return;
+    const { data: subscriptions, error } = await supabase.from('admin_push_subscriptions')
+      .select('id, endpoint, p256dh, auth');
+    if (error) throw error;
+    if (!subscriptions?.length) return;
+
+    const payload = JSON.stringify({
+      title: notification.title,
+      body: notification.body,
+      url: notification.url || '/admin',
+      type: notification.type,
+      member_key: notification.member_key || null,
+      notification_id: Number(notification.id),
+      tag: `we-rise-admin-${notification.id}`,
+    });
+
+    const staleIds = [];
+    await Promise.allSettled(subscriptions.map(async (row) => {
+      try {
+        await client.sendNotification({
+          endpoint: row.endpoint,
+          keys: { p256dh: row.p256dh, auth: row.auth },
+        }, payload, { TTL: 3600, headers: { Urgency: 'high' } });
+      } catch (error) {
+        const status = Number(error?.statusCode || error?.status || 0);
+        if (status === 404 || status === 410) staleIds.push(row.id);
+        else console.error('Admin push delivery failed:', error?.message || error);
+      }
+    }));
+
+    if (staleIds.length) {
+      const { error: cleanupError } = await supabase.from('admin_push_subscriptions').delete().in('id', staleIds);
+      if (cleanupError) console.error('Could not remove stale push subscriptions:', cleanupError.message);
+    }
+  } catch (error) {
+    console.error('Admin push notification failed:', error?.message || error);
+  }
+}
+
+async function createAdminNotification({ type, memberKey = null, title, body, url = '/admin', metadata = {} }) {
+  try {
+    const { data, error } = await supabase.from('admin_notifications').insert({
+      type: String(type || 'admin_event').slice(0, 60),
+      member_key: cleanMemberKey(memberKey) || null,
+      title: String(title || 'We-Rise Admin').slice(0, 160),
+      body: String(body || 'There is a new We-Rise admin notification.').slice(0, 500),
+      url: String(url || '/admin').slice(0, 500),
+      metadata: metadata && typeof metadata === 'object' ? metadata : {},
+    }).select('id, type, member_key, title, body, url, metadata, created_at').single();
+    if (error) throw error;
+    void sendAdminPush(data);
+    return data;
+  } catch (error) {
+    // Notification failures must never block registration or other member flows.
+    console.error('Could not create admin notification:', error?.message || error);
+    return null;
+  }
 }
 
 function buildEmergencyMessage({ name, locationText, latitude, longitude }) {
@@ -795,6 +905,17 @@ app.post('/api/profile/photo', async (c) => {
     if (updateError) {
       await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([objectPath]);
       throw updateError;
+    }
+
+    if ((updated.role || 'member') === 'member') {
+      await createAdminNotification({
+        type: 'new_member',
+        memberKey: updated.member_key,
+        title: 'New We-Rise member',
+        body: `${updated.display_name || 'A new member'} completed registration.`,
+        url: '/admin',
+        metadata: { email: updated.email || null },
+      });
     }
 
     return c.json({ profile: await safeProfileWithAvatar(updated), success: true });
@@ -2492,6 +2613,437 @@ app.post('/api/referrals', async (c) => {
     });
     if (error) throw error;
     return c.json({ success: true }, 201);
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// We-Rise Admin Control Centre V1
+// ---------------------------------------------------------------------------
+app.get('/api/admin/push/config', async (c) => {
+  const auth = await adminContext(c);
+  if (auth.response) return auth.response;
+  return c.json({
+    configured: ADMIN_PUSH_CONFIGURED,
+    public_key: ADMIN_PUSH_CONFIGURED ? VAPID_PUBLIC_KEY : null,
+  });
+});
+
+app.post('/api/admin/push/subscribe', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    if (!ADMIN_PUSH_CONFIGURED) return c.json({ error: 'Admin push notifications are not configured on Render yet.', code: 'PUSH_NOT_CONFIGURED' }, 503);
+    const body = await c.req.json();
+    const subscription = body?.subscription || body || {};
+    const endpoint = String(subscription.endpoint || '').trim();
+    const p256dh = String(subscription.keys?.p256dh || '').trim();
+    const authKey = String(subscription.keys?.auth || '').trim();
+    if (!/^https:\/\//i.test(endpoint) || !p256dh || !authKey) {
+      return c.json({ error: 'The browser push subscription is incomplete.' }, 400);
+    }
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('admin_push_subscriptions').upsert({
+      admin_member_key: auth.memberKey,
+      endpoint: endpoint.slice(0, 4000),
+      p256dh: p256dh.slice(0, 1000),
+      auth: authKey.slice(0, 1000),
+      user_agent: String(c.req.header('user-agent') || '').slice(0, 500) || null,
+      updated_at: now,
+    }, { onConflict: 'endpoint' });
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.delete('/api/admin/push/subscribe', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const body = await c.req.json();
+    const endpoint = String(body?.endpoint || '').trim();
+    if (!endpoint) return c.json({ error: 'Push endpoint is required.' }, 400);
+    const { error } = await supabase.from('admin_push_subscriptions').delete()
+      .eq('admin_member_key', auth.memberKey)
+      .eq('endpoint', endpoint);
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/notifications', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const requested = Number(c.req.query('limit') || 40);
+    const limit = Math.max(10, Math.min(100, Number.isFinite(requested) ? Math.floor(requested) : 40));
+    const [{ data: items, error: itemError }, { count: totalCount, error: totalError }, { count: readCount, error: readError }] = await Promise.all([
+      supabase.from('admin_notifications').select('id, type, member_key, title, body, url, metadata, created_at').order('created_at', { ascending: false }).limit(limit),
+      supabase.from('admin_notifications').select('id', { count: 'exact', head: true }),
+      supabase.from('admin_notification_reads').select('notification_id', { count: 'exact', head: true }).eq('admin_member_key', auth.memberKey),
+    ]);
+    if (itemError) throw itemError;
+    if (totalError) throw totalError;
+    if (readError) throw readError;
+    const ids = (items || []).map(row => row.id);
+    let readIds = new Set();
+    if (ids.length) {
+      const { data: reads, error } = await supabase.from('admin_notification_reads')
+        .select('notification_id')
+        .eq('admin_member_key', auth.memberKey)
+        .in('notification_id', ids);
+      if (error) throw error;
+      readIds = new Set((reads || []).map(row => Number(row.notification_id)));
+    }
+    return c.json({
+      unread_count: Math.max(0, Number(totalCount || 0) - Number(readCount || 0)),
+      items: (items || []).map(row => ({ ...row, id: Number(row.id), read: readIds.has(Number(row.id)) })),
+      push_configured: ADMIN_PUSH_CONFIGURED,
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/admin/notifications/:id/read', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const notificationId = Number(c.req.param('id'));
+    if (!Number.isInteger(notificationId) || notificationId <= 0) return c.json({ error: 'Invalid notification.' }, 400);
+    const { error } = await supabase.from('admin_notification_reads').upsert({
+      notification_id: notificationId,
+      admin_member_key: auth.memberKey,
+      read_at: new Date().toISOString(),
+    }, { onConflict: 'notification_id,admin_member_key' });
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/admin/notifications/read-all', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const { error } = await supabase.rpc('mark_all_admin_notifications_read', { p_admin_member_key: auth.memberKey });
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/overview', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const [{ data: metrics, error: metricError }, settingsResult] = await Promise.all([
+      supabase.rpc('get_we_rise_admin_metrics'),
+      getPaymentSettings(),
+    ]);
+    if (metricError) throw metricError;
+    return c.json({
+      metrics: metrics || {},
+      payment_settings: publicPaymentSettings(settingsResult),
+      system: {
+        paystack_configured: PAYSTACK_CONFIGURED,
+        paystack_mode: PAYSTACK_SECRET_KEY.startsWith('sk_live_') ? 'live' : 'test',
+        gemini_configured: GEMINI_CONFIGURED,
+        sms_configured: SMS_CONFIGURED,
+        support_email_configured: SUPPORT_EMAIL_CONFIGURED,
+        backmi_payments_enabled: BACKMI_PAYMENTS_ENABLED,
+        admin_push_configured: ADMIN_PUSH_CONFIGURED,
+      },
+      admin: { role: auth.profile.role, email: auth.user.email || null },
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/activity', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const requested = Number(c.req.query('limit') || 60);
+    const limit = Math.max(10, Math.min(150, Number.isFinite(requested) ? Math.floor(requested) : 60));
+    const each = Math.max(15, Math.ceil(limit / 2));
+    const [memberResult, paymentResult, waitlistResult] = await Promise.all([
+      supabase.from('member_profiles').select('member_key, display_name, email, role, created_at').order('created_at', { ascending: false }).limit(each),
+      supabase.from('payment_transactions').select('id, member_key, purpose, status, expected_amount_zar, amount_gross_zar, created_at, verified_at').order('created_at', { ascending: false }).limit(each),
+      supabase.from('waitlist_entries').select('id, name, email, created_at').order('created_at', { ascending: false }).limit(each),
+    ]);
+    if (memberResult.error) throw memberResult.error;
+    if (paymentResult.error) throw paymentResult.error;
+    if (waitlistResult.error) throw waitlistResult.error;
+
+    const paymentMemberKeys = [...new Set((paymentResult.data || []).map(row => row.member_key).filter(Boolean))];
+    const paymentMembers = new Map();
+    if (paymentMemberKeys.length) {
+      const { data, error } = await supabase.from('member_profiles').select('member_key, display_name, email').in('member_key', paymentMemberKeys);
+      if (error) throw error;
+      for (const row of data || []) paymentMembers.set(row.member_key, row);
+    }
+
+    const items = [];
+    for (const row of memberResult.data || []) {
+      items.push({ id: row.member_key, type: 'member', at: row.created_at, title: `${row.display_name || 'A member'} joined We-Rise`, detail: row.email || 'New member account' });
+    }
+    for (const row of paymentResult.data || []) {
+      const member = paymentMembers.get(row.member_key);
+      const amount = Number(row.amount_gross_zar ?? row.expected_amount_zar ?? 0);
+      const kind = row.purpose === 'membership_joining' ? 'joining payment' : row.purpose === 'membership_recurring' ? 'monthly membership' : 'BackMi gift';
+      items.push({ id: row.id, type: 'payment', at: row.verified_at || row.created_at, title: `${member?.display_name || 'Member'} · ${row.status} ${kind}`, detail: `R${amount.toFixed(2)}${member?.email ? ` · ${member.email}` : ''}` });
+    }
+    for (const row of waitlistResult.data || []) {
+      items.push({ id: row.id, type: 'waitlist', at: row.created_at, title: `${row.name || 'Someone'} joined the waitlist`, detail: row.email || 'Waitlist entry' });
+    }
+    items.sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+    return c.json({ items: items.slice(0, limit) });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/members', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)));
+    const pageSize = Math.max(10, Math.min(100, Math.floor(Number(c.req.query('page_size') || 30))));
+    const status = String(c.req.query('status') || 'all').trim().toLowerCase();
+    const search = String(c.req.query('search') || '').trim().slice(0, 100).replace(/[,%()]/g, ' ');
+    const from = (page - 1) * pageSize;
+    let query = supabase.from('member_profiles').select(PROFILE_COLUMNS, { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+    if (['active', 'trialing', 'past_due', 'cancelled', 'suspended'].includes(status)) query = query.eq('membership_status', status);
+    if (search) query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
+    const { data, error, count } = await query;
+    if (error) throw error;
+    const avatars = await avatarUrlMap(data || []);
+    const items = (data || []).map(row => ({
+      member_key: row.member_key,
+      display_name: row.display_name,
+      email: row.email,
+      role: row.role || 'member',
+      membership_status: row.membership_status,
+      membership: membershipSummary(row),
+      avatar_url: avatars.get(row.member_key) || null,
+      profile_photo_completed_at: row.profile_photo_completed_at || null,
+      created_at: row.created_at,
+      last_seen_at: row.last_seen_at,
+    }));
+    return c.json({ items, total: Number(count || 0), page, page_size: pageSize, has_more: from + items.length < Number(count || 0) });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/members/:memberKey', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const memberKey = cleanMemberKey(c.req.param('memberKey'));
+    if (!memberKey) return c.json({ error: 'Invalid member id.' }, 400);
+    const { data: profile, error } = await supabase.from('member_profiles').select(PROFILE_COLUMNS).eq('member_key', memberKey).maybeSingle();
+    if (error) throw error;
+    if (!profile) return c.json({ error: 'Member not found.' }, 404);
+    const [{ data: payments, error: paymentError }, avatarUrl] = await Promise.all([
+      supabase.from('payment_transactions').select('id, purpose, currency, expected_amount_zar, amount_gross_zar, amount_fee_zar, amount_net_zar, status, checkout_reference, provider_merchant_reference, created_at, verified_at').eq('member_key', memberKey).order('created_at', { ascending: false }).limit(50),
+      signedAvatarUrl(profile.avatar_path, 900),
+    ]);
+    if (paymentError) throw paymentError;
+    let authUser = null;
+    if (profile.auth_user_id) {
+      const { data, error: authError } = await supabase.auth.admin.getUserById(profile.auth_user_id);
+      if (!authError && data?.user) authUser = data.user;
+    }
+    return c.json({
+      profile: {
+        member_key: profile.member_key,
+        display_name: profile.display_name,
+        email: profile.email,
+        role: profile.role || 'member',
+        membership_status: profile.membership_status,
+        avatar_url: avatarUrl,
+        profile_photo_completed_at: profile.profile_photo_completed_at || null,
+        paystack_customer_code: profile.paystack_customer_code || null,
+        subscription_code: profile.payfast_subscription_token || null,
+        subscription_status: profile.payfast_subscription_status || null,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
+        last_seen_at: profile.last_seen_at,
+      },
+      membership: membershipSummary(profile),
+      auth: authUser ? {
+        phone: authUser.phone || null,
+        email_confirmed_at: authUser.email_confirmed_at || null,
+        last_sign_in_at: authUser.last_sign_in_at || null,
+        created_at: authUser.created_at || null,
+      } : {},
+      payments: payments || [],
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/payments', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)));
+    const pageSize = Math.max(10, Math.min(100, Math.floor(Number(c.req.query('page_size') || 40))));
+    const status = String(c.req.query('status') || 'all').trim().toLowerCase();
+    const purpose = String(c.req.query('purpose') || 'all').trim().toLowerCase();
+    const from = (page - 1) * pageSize;
+    let query = supabase.from('payment_transactions').select('id, member_key, purpose, request_id, checkout_reference, provider_merchant_reference, pf_payment_id, currency, expected_amount_zar, amount_gross_zar, amount_fee_zar, amount_net_zar, item_name, status, created_at, updated_at, verified_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+    if (['pending', 'complete', 'failed', 'cancelled', 'refunded', 'reversed'].includes(status)) query = query.eq('status', status);
+    if (['membership_joining', 'membership_recurring', 'backmi_gift'].includes(purpose)) query = query.eq('purpose', purpose);
+    const { data, error, count } = await query;
+    if (error) throw error;
+    const memberKeys = [...new Set((data || []).map(row => row.member_key).filter(Boolean))];
+    const members = new Map();
+    if (memberKeys.length) {
+      const { data: memberRows, error: memberError } = await supabase.from('member_profiles').select('member_key, display_name, email').in('member_key', memberKeys);
+      if (memberError) throw memberError;
+      for (const row of memberRows || []) members.set(row.member_key, row);
+    }
+    const items = (data || []).map(row => ({ ...row, member_name: members.get(row.member_key)?.display_name || null, member_email: members.get(row.member_key)?.email || null }));
+    return c.json({ items, total: Number(count || 0), page, page_size: pageSize, has_more: from + items.length < Number(count || 0) });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/waitlist', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)));
+    const pageSize = Math.max(10, Math.min(500, Math.floor(Number(c.req.query('page_size') || 100))));
+    const search = String(c.req.query('search') || '').trim().slice(0, 100).replace(/[,%()]/g, ' ');
+    const from = (page - 1) * pageSize;
+    let query = supabase.from('waitlist_entries').select('id, name, email, age, province, city_town, country, explanation, status, created_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+    if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+    const { data, error, count } = await query;
+    if (error) throw error;
+    return c.json({ items: data || [], total: Number(count || 0), page, page_size: pageSize, has_more: from + (data?.length || 0) < Number(count || 0) });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.delete('/api/admin/waitlist/:id', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid waitlist id.' }, 400);
+    const { data: existing, error: findError } = await supabase.from('waitlist_entries').select('id, name, email').eq('id', id).maybeSingle();
+    if (findError) throw findError;
+    if (!existing) return c.json({ error: 'Waitlist entry not found.' }, 404);
+    const { error } = await supabase.from('waitlist_entries').delete().eq('id', id);
+    if (error) throw error;
+    await recordAdminAudit(auth, 'waitlist_entry_removed', 'waitlist', String(id), { email: existing.email, name: existing.name });
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/community', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const requested = Number(c.req.query('limit') || 100);
+    const limit = Math.max(10, Math.min(250, Number.isFinite(requested) ? Math.floor(requested) : 100));
+    const [{ data: topics, error: topicError }, { data: comments, error: commentError }] = await Promise.all([
+      supabase.from('community_topics').select('id, title, author, author_user_id, created_at').order('created_at', { ascending: false }).limit(limit),
+      supabase.from('community_comments').select('id, topic_id, author, content, author_user_id, created_at').order('created_at', { ascending: false }).limit(limit),
+    ]);
+    if (topicError) throw topicError;
+    if (commentError) throw commentError;
+    return c.json({ topics: topics || [], comments: comments || [] });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.delete('/api/admin/community/topics/:id', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid topic id.' }, 400);
+    const { data: existing, error: findError } = await supabase.from('community_topics').select('id, title, author').eq('id', id).maybeSingle();
+    if (findError) throw findError;
+    if (!existing) return c.json({ error: 'Community post not found.' }, 404);
+    const { error } = await supabase.from('community_topics').delete().eq('id', id);
+    if (error) throw error;
+    await recordAdminAudit(auth, 'community_topic_removed', 'community_topic', String(id), { author: existing.author, title: existing.title });
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.delete('/api/admin/community/comments/:id', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id < 1) return c.json({ error: 'Invalid comment id.' }, 400);
+    const { data: existing, error: findError } = await supabase.from('community_comments').select('id, topic_id, author, content').eq('id', id).maybeSingle();
+    if (findError) throw findError;
+    if (!existing) return c.json({ error: 'Community comment not found.' }, 404);
+    const { error } = await supabase.from('community_comments').delete().eq('id', id);
+    if (error) throw error;
+    await recordAdminAudit(auth, 'community_comment_removed', 'community_comment', String(id), { topic_id: existing.topic_id, author: existing.author, content_preview: String(existing.content || '').slice(0, 160) });
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/resellers', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const requested = Number(c.req.query('limit') || 200);
+    const limit = Math.max(10, Math.min(500, Number.isFinite(requested) ? Math.floor(requested) : 200));
+    const { data, error, count } = await supabase.from('referrals').select('id, referrer, referred_email, commission, status, created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(limit);
+    if (error) throw error;
+    const keys = [...new Set((data || []).map(row => row.referrer).filter(Boolean))];
+    const members = new Map();
+    if (keys.length) {
+      const { data: rows, error: memberError } = await supabase.from('member_profiles').select('member_key, display_name, email').in('member_key', keys);
+      if (memberError) throw memberError;
+      for (const row of rows || []) members.set(row.member_key, row);
+    }
+    const items = (data || []).map(row => ({ ...row, commission: Number(row.commission || 0), referrer_name: members.get(row.referrer)?.display_name || null, referrer_email: members.get(row.referrer)?.email || null }));
+    return c.json({ items, total: Number(count || 0), total_commission_zar: items.reduce((sum, row) => sum + Number(row.commission || 0), 0) });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/admin/audit', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const requested = Number(c.req.query('limit') || 250);
+    const limit = Math.max(10, Math.min(500, Number.isFinite(requested) ? Math.floor(requested) : 250));
+    const { data, error } = await supabase.from('admin_audit_log').select('id, actor_member_key, actor_email, actor_role, action, target_type, target_key, metadata, created_at').order('created_at', { ascending: false }).limit(limit);
+    if (error) throw error;
+    return c.json({ items: data || [] });
   } catch (error) {
     return fail(c, error);
   }

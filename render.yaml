@@ -44,6 +44,8 @@ services:
         value: "30"
       - key: GEMINI_STAFF_DAILY_LIMIT
         value: "100"
+      - key: WE_RISE_OWNER_EMAILS
+        sync: false
       - key: WE_RISE_ADMIN_EMAILS
         sync: false
       - key: BACKMI_REVIEWER_EMAILS
@@ -58,3 +60,9 @@ services:
         value: We-Rise Support
       - key: BREVO_API_KEY
         sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:request4.support@gmail.com

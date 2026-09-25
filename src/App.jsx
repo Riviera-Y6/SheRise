@@ -26,6 +26,7 @@ import Billing from './components/Billing';
 import BrandMark from './components/BrandMark';
 import ProfilePhoto from './components/ProfilePhoto';
 import Support from './components/Support';
+import AdminDashboard from './components/AdminDashboard';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home', public: true },
@@ -104,6 +105,8 @@ export default function App() {
   const memberPlan = profile?.plan || 'free';
   const photoRequired = Boolean(isAuthenticated && profile?.photo_required);
   const hasMemberAccess = Boolean(isAuthenticated && membership?.access_allowed && !photoRequired);
+  const isAdminUser = profile?.role === 'owner' || profile?.role === 'admin';
+  const adminPortal = window.location.pathname.replace(/\/+$/, '') === '/admin';
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -306,6 +309,27 @@ export default function App() {
 
   const renderPrivateFeature = (content) => !isAuthenticated ? protectedContent : hasMemberAccess ? content : membershipLockedContent;
 
+  if (adminPortal) {
+    if (!authReady || (isAuthenticated && !profile)) {
+      return <div className="admin-gate"><BrandMark variant="compact" className="app-logo-icon" /><h2>We-Rise Admin</h2><p>Loading secure admin access…</p></div>;
+    }
+    if (!isAuthenticated) {
+      return (
+        <div className="admin-gate">
+          <BrandMark variant="compact" className="app-logo-icon" />
+          <h2>We-Rise Admin</h2>
+          <p>{lang === 'en' ? 'Log in with an Owner or Admin account to continue.' : 'Meld aan met ’n Eienaar- of Admin-rekening om voort te gaan.'}</p>
+          <div className="admin-gate-actions"><a className="btn btn-secondary" href="/">← We-Rise</a><button className="btn btn-primary" onClick={() => openAuth('login')}>{lang === 'en' ? 'Admin login' : 'Admin-aanmelding'}</button></div>
+          <AuthModal open={authModal.open} mode={authModal.mode} lang={lang} onClose={() => setAuthModal(current => ({ ...current, open: false }))} />
+        </div>
+      );
+    }
+    if (!isAdminUser) {
+      return <div className="admin-gate"><BrandMark variant="compact" className="app-logo-icon" /><h2>{lang === 'en' ? 'Admin access required' : 'Admin-toegang vereis'}</h2><p>{lang === 'en' ? 'This account is not authorised to open the We-Rise Admin Control Centre.' : 'Hierdie rekening is nie gemagtig om die We-Rise Admin Beheersentrum oop te maak nie.'}</p><a className="btn btn-primary" href="/">{lang === 'en' ? 'Back to We-Rise' : 'Terug na We-Rise'}</a></div>;
+    }
+    return <AdminDashboard lang={lang} profile={profile} onToggleLang={toggleLang} onLogout={signOut} />;
+  }
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -319,6 +343,7 @@ export default function App() {
           </button>
           {authReady && (isAuthenticated ? (
             <div className="header-member-wrap">
+              {isAdminUser && <a href="/admin" className="header-admin-link">Admin</a>}
               <button type="button" className="header-member-chip" title={lang === 'en' ? 'View permanent profile selfie' : 'Bekyk permanente profielselfie'} onClick={() => setProfilePhotoOpen(true)}>
                 <span className="header-member-avatar">
                   {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : String(userName || 'W').trim().charAt(0).toUpperCase()}
