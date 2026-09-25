@@ -110,13 +110,13 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
             <HiDownload style={{ color: '#FFC107', fontSize: 18 }} />
           </div>
           <div>
-            <div className="card-title" style={{ fontSize: 14, marginBottom: 2 }}>{t.addToHome}</div>
-            <div className="card-subtitle" style={{ marginBottom: 0, fontSize: 12 }}>{t.addToHomeDesc}</div>
+            <div className="card-title" style={{ fontSize: 14, marginBottom: 2 }}>{lang === 'en' ? 'We-Rise Growth Goals' : 'We-Rise Groei-doelwitte'}</div>
+            <div className="card-subtitle" style={{ marginBottom: 0, fontSize: 12 }}>{lang === 'en' ? 'Together we are building the We-Rise community, one member at a time.' : 'Saam bou ons die We-Rise-gemeenskap, een lid op ’n slag.'}</div>
           </div>
         </div>
         <div className="install-steps">
-          <div className="install-step"><span className="install-device">🍎 iPhone</span><span className="install-desc">{t.addToHomeIOS}</span></div>
-          <div className="install-step"><span className="install-device">🤖 Android</span><span className="install-desc">{t.addToHomeAndroid}</span></div>
+          <div className="install-step"><span className="install-device"><strong>{lang === 'en' ? 'SHORT TERM GOAL:' : 'KORT TERMYN DOELWIT:'}</strong></span><span className="install-desc">{lang === 'en' ? '1,000+ Members' : '1,000+ Lede'}</span></div>
+          <div className="install-step"><span className="install-device"><strong>{lang === 'en' ? 'LONG TERM GOAL:' : 'LANG TERMYN DOELWIT:'}</strong></span><span className="install-desc">{lang === 'en' ? '1,000,000+ Members' : '1,000,000+ Lede'}</span></div>
         </div>
       </div>
     </div>

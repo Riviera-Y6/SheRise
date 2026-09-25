@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { HiUserAdd, HiCheckCircle, HiUsers, HiMail, HiGlobeAlt } from 'react-icons/hi';
+import { HiUserAdd, HiCheckCircle, HiUsers, HiMail, HiGlobeAlt, HiLocationMarker, HiInformationCircle } from 'react-icons/hi';
 import { apiRequest } from '../lib/api';
 
 const initialForm = {
   name: '',
   email: '',
   age: '',
+  province: '',
+  cityTown: '',
   country: 'South Africa',
-  reason: '',
   explanation: '',
 };
 
@@ -37,7 +38,7 @@ export default function Waitlist({ lang, userName, showToast }) {
     event.preventDefault();
     if (submitting) return;
     const age = Number(form.age);
-    if (!form.name.trim() || !form.email.trim() || !Number.isFinite(age) || age < 18 || age > 120 || !form.country.trim() || !form.reason.trim() || !form.explanation.trim()) {
+    if (!form.name.trim() || !form.email.trim() || !Number.isFinite(age) || age < 18 || age > 120 || !form.province.trim() || !form.cityTown.trim() || !form.country.trim() || !form.explanation.trim()) {
       showToast(lang === 'en' ? 'Please complete every waitlist field.' : 'Voltooi asseblief elke waglysveld.');
       return;
     }
@@ -50,8 +51,9 @@ export default function Waitlist({ lang, userName, showToast }) {
           name: form.name.trim(),
           email: form.email.trim(),
           age,
+          province: form.province.trim(),
+          city_town: form.cityTown.trim(),
           country: form.country.trim(),
-          reason: form.reason.trim(),
           explanation: form.explanation.trim(),
         }),
       });
@@ -73,8 +75,8 @@ export default function Waitlist({ lang, userName, showToast }) {
           <div className="eyebrow">WE-RISE</div>
           <h2>{lang === 'en' ? 'You are on the list.' : 'Jy is op die lys.'}</h2>
           <p>{lang === 'en'
-            ? 'Thank you for joining the movement. Your request has been safely recorded and we will be able to contact you when onboarding opens.'
-            : 'Dankie dat jy by die beweging aansluit. Jou versoek is veilig aangeteken en ons sal jou kan kontak wanneer registrasie oopmaak.'}</p>
+            ? 'Thank you. Your details have been recorded. If you register for We-Rise later with this email address, your waitlist entry will be removed automatically.'
+            : 'Dankie. Jou besonderhede is aangeteken. Indien jy later met hierdie e-posadres vir We-Rise registreer, sal jou waglysinskrywing outomaties verwyder word.'}</p>
           {waitlistCount !== null && (
             <div className="waitlist-count-pill"><HiUsers /> {waitlistCount.toLocaleString()} {lang === 'en' ? 'people waiting' : 'mense wag'}</div>
           )}
@@ -94,8 +96,18 @@ export default function Waitlist({ lang, userName, showToast }) {
           <div className="eyebrow">{lang === 'en' ? 'JOIN THE MOVEMENT' : 'SLUIT AAN BY DIE BEWEGING'}</div>
           <h2>{lang === 'en' ? 'Join the We-Rise Waitlist' : 'Sluit aan by die We-Rise Waglys'}</h2>
           <p>{lang === 'en'
-            ? 'Tell us a little about yourself and why We-Rise matters to you. This becomes the foundation for future member onboarding.'
-            : 'Vertel ons ’n bietjie van jouself en hoekom We-Rise vir jou belangrik is. Dit vorm die grondslag vir toekomstige lidregistrasie.'}</p>
+            ? 'If you want to join We-Rise but are not ready to register yet, add your details to the waitlist.'
+            : 'Indien jy by We-Rise wil aansluit maar nog nie gereed is om te registreer nie, voeg jou besonderhede by die waglys.'}</p>
+        </div>
+      </div>
+
+      <div className="waitlist-registration-note">
+        <HiInformationCircle />
+        <div>
+          <strong>{lang === 'en' ? 'Not ready to pay the R199.00 registration fee yet?' : 'Nog nie gereed om die R199.00 registrasiefooi te betaal nie?'}</strong>
+          <span>{lang === 'en'
+            ? 'If a prospective member is interested but does not currently have the R199.00 registration fee available, they may join the waitlist. Once they register, their details will automatically be removed from the waitlist.'
+            : 'Indien ’n voornemende lid belangstel maar nie tans die R199.00 registrasiefooi beskikbaar het nie, kan hulle by die waglys aansluit. Sodra hulle later registreer, sal hulle besonderhede outomaties van die waglys verwyder word.'}</span>
         </div>
       </div>
 
@@ -124,19 +136,25 @@ export default function Waitlist({ lang, userName, showToast }) {
           <div className="input-with-icon"><HiMail /><input className="input" type="email" value={form.email} onChange={e => update('email', e.target.value)} maxLength={320} placeholder="name@example.com" required /></div>
         </div>
 
+        <div className="waitlist-grid">
+          <div className="form-group">
+            <label>{lang === 'en' ? 'Province / State' : 'Provinsie / Staat'}</label>
+            <div className="input-with-icon"><HiLocationMarker /><input className="input" value={form.province} onChange={e => update('province', e.target.value)} maxLength={80} required /></div>
+          </div>
+          <div className="form-group">
+            <label>{lang === 'en' ? 'City / Town' : 'Stad / Dorp'}</label>
+            <div className="input-with-icon"><HiLocationMarker /><input className="input" value={form.cityTown} onChange={e => update('cityTown', e.target.value)} maxLength={100} required /></div>
+          </div>
+        </div>
+
         <div className="form-group">
           <label>{lang === 'en' ? 'Country' : 'Land'}</label>
           <div className="input-with-icon"><HiGlobeAlt /><input className="input" value={form.country} onChange={e => update('country', e.target.value)} maxLength={80} required /></div>
         </div>
 
         <div className="form-group">
-          <label>{lang === 'en' ? 'Reason for Request' : 'Rede vir Versoek'}</label>
-          <input className="input" value={form.reason} onChange={e => update('reason', e.target.value)} maxLength={160} placeholder={lang === 'en' ? 'e.g. financial support, safety, community, personal growth' : 'bv. finansiële ondersteuning, veiligheid, gemeenskap, persoonlike groei'} required />
-        </div>
-
-        <div className="form-group">
           <label>{lang === 'en' ? 'Tell us more' : 'Vertel ons meer'}</label>
-          <textarea className="input waitlist-textarea" value={form.explanation} onChange={e => update('explanation', e.target.value)} maxLength={1200} rows={6} placeholder={lang === 'en' ? 'Why would you like to become part of We-Rise?' : 'Hoekom wil jy deel van We-Rise word?'} required />
+          <textarea className="input waitlist-textarea" value={form.explanation} onChange={e => update('explanation', e.target.value)} maxLength={1200} rows={6} placeholder={lang === 'en' ? 'Anything else you would like We-Rise to know?' : 'Enigiets anders wat jy wil hê We-Rise moet weet?'} required />
           <div className="field-counter">{form.explanation.length}/1200</div>
         </div>
 

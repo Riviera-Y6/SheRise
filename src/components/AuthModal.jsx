@@ -227,6 +227,15 @@ export default function AuthModal({ open, mode: requestedMode = 'login', lang = 
             </label>
           )}
 
+          {mode === 'register' && (
+            <div className="auth-message auth-selfie-notice">
+              <strong>{lang === 'en' ? 'Permanent selfie required' : 'Permanente selfie verpligtend'}</strong>
+              <span>{lang === 'en'
+                ? 'After confirming your email and signing in, you must take a live selfie with your camera. Gallery photos are not accepted and the saved selfie cannot be changed later.'
+                : 'Nadat jy jou e-pos bevestig en aangemeld het, moet jy ’n regstreekse selfie met jou kamera neem. Galeryfoto’s word nie aanvaar nie en die gestoorde selfie kan nie later verander word nie.'}</span>
+            </div>
+          )}
+
           {error && <div className="auth-message auth-error">{error}</div>}
           {notice && <div className="auth-message auth-notice">{notice}</div>}
 

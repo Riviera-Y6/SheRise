@@ -764,10 +764,18 @@ app.post('/api/profile/photo', async (c) => {
     const auth = await authContext(c);
     if (auth.response) return auth.response;
 
+    if (auth.profile.avatar_path || auth.profile.profile_photo_completed_at) {
+      return c.json({ error: 'Your registration selfie is permanent and cannot be changed.' }, 409);
+    }
+
     const form = await c.req.formData();
     const photo = form.get('photo');
+    const captureSource = String(form.get('capture_source') || '');
+    if (captureSource !== 'live_selfie_camera') {
+      return c.json({ error: 'A live camera selfie is required. Gallery uploads are not accepted.' }, 400);
+    }
     const jpeg = await profilePhotoJpeg(photo);
-    const objectPath = `members/${auth.memberKey}/avatar-${Date.now()}.jpg`;
+    const objectPath = `members/${auth.memberKey}/registration-selfie-${Date.now()}.jpg`;
 
     const { error: uploadError } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).upload(objectPath, jpeg, {
       contentType: 'image/jpeg',
@@ -777,11 +785,10 @@ app.post('/api/profile/photo', async (c) => {
     if (uploadError) throw uploadError;
 
     const now = new Date().toISOString();
-    const oldPath = auth.profile.avatar_path;
     const { data: updated, error: updateError } = await supabase.from('member_profiles').update({
       avatar_path: objectPath,
       avatar_updated_at: now,
-      profile_photo_completed_at: auth.profile.profile_photo_completed_at || now,
+      profile_photo_completed_at: now,
       updated_at: now,
     }).eq('member_key', auth.memberKey).select(PROFILE_COLUMNS).single();
 
@@ -790,15 +797,10 @@ app.post('/api/profile/photo', async (c) => {
       throw updateError;
     }
 
-    if (oldPath && oldPath !== objectPath) {
-      const { error: removeError } = await supabase.storage.from(PROFILE_PHOTO_BUCKET).remove([oldPath]);
-      if (removeError) console.error('Could not remove the previous profile photo:', removeError.message);
-    }
-
     return c.json({ profile: await safeProfileWithAvatar(updated), success: true });
   } catch (error) {
     const known = String(error?.message || '');
-    if (known.includes('Choose a profile photo') || known.includes('Profile photos') || known.includes('selected profile') || known.includes('could not read')) {
+    if (known.includes('Choose a profile photo') || known.includes('Profile photos') || known.includes('selected profile') || known.includes('could not read') || known.includes('live camera selfie')) {
       return c.json({ error: known }, 400);
     }
     return fail(c, error);
@@ -2305,18 +2307,27 @@ app.get('/api/waitlist/count', async (c) => {
 
 app.post('/api/waitlist', async (c) => {
   try {
-    const { name, email, age, country, reason, explanation } = await c.req.json();
+    const { name, email, age, province, city_town, country, explanation } = await c.req.json();
     const cleanEmail = String(email || '').trim().toLowerCase();
     const numericAge = Number(age);
-    if (!String(name || '').trim() || !/^\S+@\S+\.\S+$/.test(cleanEmail) || !Number.isFinite(numericAge) || numericAge < 18 || numericAge > 120 || !String(country || '').trim() || !String(reason || '').trim() || !String(explanation || '').trim()) {
+    if (!String(name || '').trim() || !/^\S+@\S+\.\S+$/.test(cleanEmail) || !Number.isFinite(numericAge) || numericAge < 18 || numericAge > 120 || !String(province || '').trim() || !String(city_town || '').trim() || !String(country || '').trim() || !String(explanation || '').trim()) {
       return c.json({ error: 'All waitlist fields are required and age must be 18 or older.' }, 400);
     }
+
+    const { data: registeredMember, error: registeredError } = await supabase.from('member_profiles')
+      .select('member_key')
+      .eq('email', cleanEmail)
+      .maybeSingle();
+    if (registeredError) throw registeredError;
+    if (registeredMember) return c.json({ error: 'This email address is already registered with We-Rise.' }, 409);
+
     const { data, error } = await supabase.from('waitlist_entries').insert({
       name: cleanName(name),
       email: cleanEmail.slice(0, 320),
       age: numericAge,
+      province: String(province).trim().slice(0, 80),
+      city_town: String(city_town).trim().slice(0, 100),
       country: String(country).trim().slice(0, 80),
-      reason: String(reason).trim().slice(0, 160),
       explanation: String(explanation).trim().slice(0, 1200),
     }).select('id').single();
     if (error) {

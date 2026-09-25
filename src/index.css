@@ -3800,6 +3800,10 @@ textarea.input {
 .waitlist-hero h2, .waitlist-success-card h2 { font-size: 24px; margin-bottom: 5px; }
 .waitlist-hero p, .waitlist-success-card p { font-size: 12px; line-height: 1.65; color: var(--text-secondary); }
 .waitlist-count-banner { display: flex; align-items: center; gap: 7px; padding: 11px 13px; border-radius: 12px; background: rgba(255,105,180,.06); border: 1px solid var(--border-color); margin-bottom: 14px; color: var(--text-secondary); font-size: 11px; }
+.waitlist-registration-note { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; padding: 13px 14px; border: 1px solid rgba(255,105,180,.24); border-radius: 14px; background: linear-gradient(135deg, rgba(255,105,180,.09), rgba(255,20,147,.035)); color: var(--text-secondary); font-size: 11px; line-height: 1.55; }
+.waitlist-registration-note > svg { flex: 0 0 auto; margin-top: 2px; color: var(--pink); font-size: 18px; }
+.waitlist-registration-note div { display: grid; gap: 4px; }
+.waitlist-registration-note strong { color: var(--text-primary); font-size: 11px; }
 .waitlist-count-banner svg, .waitlist-count-banner strong { color: var(--pink); }
 .waitlist-form { padding: 18px; }
 .waitlist-textarea { resize: vertical; min-height: 130px; }
@@ -4233,6 +4237,14 @@ textarea.input {
   background: rgba(76,175,80,.08);
   border: 1px solid rgba(76,175,80,.18);
 }
+.auth-selfie-notice {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  background: rgba(255,105,180,.06);
+  border: 1px solid rgba(255,105,180,.18);
+}
+.auth-selfie-notice strong { color: var(--pink-light); }
 .auth-text-button,
 .auth-back-button {
   display: inline-flex;
@@ -5241,6 +5253,12 @@ textarea.input {
   grid-template-columns: 1fr 1fr;
   gap: 9px;
 }
+.profile-photo-actions-single { grid-template-columns: 1fr; }
+.profile-photo-actions button { font-family: inherit; }
+.profile-photo-picker:disabled { opacity: .55; cursor: wait; }
+.profile-selfie-camera-shell { position: relative; width: min(100%, 320px); aspect-ratio: 1 / 1; margin: 0 auto 17px; overflow: hidden; border: 4px solid rgba(255,105,180,.5); border-radius: 22px; background: #11111b; box-shadow: 0 12px 32px rgba(0,0,0,.32); }
+.profile-selfie-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.profile-selfie-guide { position: absolute; inset: 8% 18%; border: 2px solid rgba(255,255,255,.78); border-radius: 46% 46% 42% 42% / 38% 38% 54% 54%; box-shadow: 0 0 0 999px rgba(0,0,0,.10); pointer-events: none; }
 .profile-photo-camera-picker {
   border-style: solid;
   color: var(--text-primary);

@@ -319,7 +319,7 @@ export default function App() {
           </button>
           {authReady && (isAuthenticated ? (
             <div className="header-member-wrap">
-              <button type="button" className="header-member-chip" title={lang === 'en' ? 'View or change profile photo' : 'Bekyk of verander profielprent'} onClick={() => setProfilePhotoOpen(true)}>
+              <button type="button" className="header-member-chip" title={lang === 'en' ? 'View permanent profile selfie' : 'Bekyk permanente profielselfie'} onClick={() => setProfilePhotoOpen(true)}>
                 <span className="header-member-avatar">
                   {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : String(userName || 'W').trim().charAt(0).toUpperCase()}
                 </span>
@@ -425,7 +425,7 @@ export default function App() {
           onUploaded={(updatedProfile) => {
             if (updatedProfile) setProfile(updatedProfile);
             refreshProfile();
-            showToast(lang === 'en' ? 'Your profile photo is ready.' : 'Jou profielprent is gereed.');
+            showToast(lang === 'en' ? 'Your permanent registration selfie is ready.' : 'Jou permanente registrasie-selfie is gereed.');
           }}
           onOpenSupport={() => setActiveTab('support')}
         />
@@ -465,12 +465,6 @@ export default function App() {
           lang={lang}
           currentPhotoUrl={profile?.avatar_url || ''}
           onClose={() => setProfilePhotoOpen(false)}
-          onUploaded={(updatedProfile) => {
-            if (updatedProfile) setProfile(updatedProfile);
-            setProfilePhotoOpen(false);
-            refreshProfile();
-            showToast(lang === 'en' ? 'Your profile photo was updated.' : 'Jou profielprent is opgedateer.');
-          }}
         />
       )}
     </div>
