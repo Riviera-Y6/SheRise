@@ -104,10 +104,10 @@ export default function Waitlist({ lang, userName, showToast }) {
       <div className="waitlist-registration-note">
         <HiInformationCircle />
         <div>
-          <strong>{lang === 'en' ? 'Not ready to pay the R199.00 registration fee yet?' : 'Nog nie gereed om die R199.00 registrasiefooi te betaal nie?'}</strong>
+          <strong>{lang === 'en' ? 'Not ready to pay the R194.00 registration fee yet?' : 'Nog nie gereed om die R194.00 registrasiefooi te betaal nie?'}</strong>
           <span>{lang === 'en'
-            ? 'If a prospective member is interested but does not currently have the R199.00 registration fee available, they may join the waitlist. Once they register, their details will automatically be removed from the waitlist.'
-            : 'Indien ’n voornemende lid belangstel maar nie tans die R199.00 registrasiefooi beskikbaar het nie, kan hulle by die waglys aansluit. Sodra hulle later registreer, sal hulle besonderhede outomaties van die waglys verwyder word.'}</span>
+            ? 'If a prospective member is interested but does not currently have the R194.00 registration fee available, they may join the waitlist. Once they register, their details will automatically be removed from the waitlist.'
+            : 'Indien ’n voornemende lid belangstel maar nie tans die R194.00 registrasiefooi beskikbaar het nie, kan hulle by die waglys aansluit. Sodra hulle later registreer, sal hulle besonderhede outomaties van die waglys verwyder word.'}</span>
         </div>
       </div>
 

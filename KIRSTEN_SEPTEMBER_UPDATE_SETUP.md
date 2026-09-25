@@ -17,7 +17,7 @@ This build adds only the requested September changes on top of the current Payst
    - Supabase has a database trigger that prevents the stored selfie path/completion record from being changed or cleared.
 
 3. Waitlist update
-   - Adds the R199.00 registration-fee explanation in Afrikaans and English.
+   - Adds the R194.00 registration-fee explanation in Afrikaans and English.
    - Adds Province / State and City / Town.
    - Removes Reason for Request from new submissions.
    - A matching waitlist entry is automatically removed when that email becomes a registered We-Rise member.
