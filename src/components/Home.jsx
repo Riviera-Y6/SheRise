@@ -114,9 +114,15 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
             <div className="card-subtitle" style={{ marginBottom: 0, fontSize: 12 }}>{lang === 'en' ? 'Together we are building the We-Rise community, one member at a time.' : 'Saam bou ons die We-Rise-gemeenskap, een lid op ’n slag.'}</div>
           </div>
         </div>
-        <div className="install-steps">
-          <div className="install-step"><span className="install-device"><strong>{lang === 'en' ? 'SHORT TERM GOAL:' : 'KORT TERMYN DOELWIT:'}</strong></span><span className="install-desc">{lang === 'en' ? '1,000+ Members' : '1,000+ Lede'}</span></div>
-          <div className="install-step"><span className="install-device"><strong>{lang === 'en' ? 'LONG TERM GOAL:' : 'LANG TERMYN DOELWIT:'}</strong></span><span className="install-desc">{lang === 'en' ? '1,000,000+ Members' : '1,000,000+ Lede'}</span></div>
+        <div className="install-steps growth-goal-steps">
+          <div className="install-step growth-goal-step">
+            <span className="install-device growth-goal-label"><strong>{lang === 'en' ? 'SHORT TERM GOAL:' : 'KORT TERMYN DOELWIT:'}</strong></span>
+            <span className="install-desc growth-goal-value">{lang === 'en' ? '1,000+ Members' : '1,000+ Lede'}</span>
+          </div>
+          <div className="install-step growth-goal-step">
+            <span className="install-device growth-goal-label"><strong>{lang === 'en' ? 'LONG TERM GOAL:' : 'LANG TERMYN DOELWIT:'}</strong></span>
+            <span className="install-desc growth-goal-value">{lang === 'en' ? '1,000,000+ Members' : '1,000,000+ Lede'}</span>
+          </div>
         </div>
       </div>
     </div>

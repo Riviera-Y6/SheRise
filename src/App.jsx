@@ -343,7 +343,6 @@ export default function App() {
           </button>
           {authReady && (isAuthenticated ? (
             <div className="header-member-wrap">
-              {isAdminUser && <a href="/admin" className="header-admin-link">Admin</a>}
               <button type="button" className="header-member-chip" title={lang === 'en' ? 'View permanent profile selfie' : 'Bekyk permanente profielselfie'} onClick={() => setProfilePhotoOpen(true)}>
                 <span className="header-member-avatar">
                   {profile?.avatar_url ? <img src={profile.avatar_url} alt="" /> : String(userName || 'W').trim().charAt(0).toUpperCase()}
@@ -357,6 +356,13 @@ export default function App() {
           ))}
         </div>
       </header>
+
+      {isAdminUser && (
+        <a href="/admin" className="admin-fab" aria-label="Open We-Rise Admin Control Centre" title="Open We-Rise Admin Control Centre">
+          <span className="admin-fab-icon"><HiShieldCheck /></span>
+          <span className="admin-fab-label">Admin</span>
+        </a>
+      )}
 
       <main className="main-content">
         {activeTab === 'home' && (

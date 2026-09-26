@@ -5746,3 +5746,86 @@ textarea.input {
   .admin-notification-panel { position: fixed; top: 72px; right: 10px; left: 10px; width: auto; max-height: calc(100vh - 84px); }
   .admin-notification-list { max-height: calc(100vh - 210px); }
 }
+
+/* ================================================================
+   Mobile Growth Goals + floating Admin access alignment
+   ================================================================ */
+.admin-fab {
+  position: fixed;
+  left: max(14px, calc((100vw - 480px) / 2 + 14px));
+  top: calc(74px + env(safe-area-inset-top));
+  bottom: auto;
+  z-index: 240;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 10px 5px 5px;
+  border: 1px solid rgba(255, 105, 180, 0.34);
+  border-radius: 999px;
+  background: rgba(35, 35, 55, 0.94);
+  color: var(--text-primary);
+  box-shadow: 0 10px 30px rgba(0,0,0,.34), 0 0 22px rgba(255,105,180,.09);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.admin-fab:hover,
+.admin-fab:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(255,105,180,.68);
+  background: rgba(45,45,68,.98);
+  box-shadow: 0 13px 34px rgba(0,0,0,.42), 0 0 27px rgba(255,105,180,.14);
+  outline: none;
+}
+.admin-fab-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--gradient-pink);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(255,20,147,.20);
+}
+.admin-fab-icon svg { font-size: 12px; }
+.admin-fab-label {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+@media (max-width: 520px) {
+  .growth-goal-step {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  .growth-goal-label {
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+  }
+  .growth-goal-value {
+    width: 100%;
+    line-height: 1.3;
+  }
+}
+
+@media (max-width: 360px) {
+  .admin-fab {
+    left: 10px;
+    padding: 5px 9px 5px 5px;
+  }
+}
+
+@media (min-width: 900px) {
+  .admin-fab {
+    left: clamp(24px, 3vw, 48px);
+  }
+}
