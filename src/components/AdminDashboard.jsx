@@ -12,13 +12,13 @@ const copy = {
     title: 'Admin Control Centre', subtitle: 'Members, money and activity in one secure place.', back: 'Back to We-Rise', logout: 'Log out',
     overview: 'Overview', members: 'Members', activity: 'Live activity', payments: 'Payments', waitlist: 'Waitlist',
     community: 'Community', backmi: 'BackMi', resellers: 'Resellers', audit: 'Audit log', system: 'System',
-    notifications: 'Notifications', enablePush: 'Enable push notifications', disablePush: 'Disable push', markAllRead: 'Mark all read', noNotifications: 'No admin notifications yet.', pushEnabled: 'Push notifications are on.',
+    notifications: 'Notifications', enablePush: 'Enable push notifications', disablePush: 'Disable push', markAllRead: 'Mark all read', noNotifications: 'No admin notifications yet.', pushEnabled: 'Push notifications are on.', removeUser: 'Remove user', removeConfirm: 'Remove this user from We-Rise? They will be blocked from signing in and lose member access. Payment and audit records are retained.', removeDone: 'User removed from We-Rise.',
   },
   af: {
     title: 'Admin Beheersentrum', subtitle: 'Lede, geld en aktiwiteit op een veilige plek.', back: 'Terug na We-Rise', logout: 'Meld af',
     overview: 'Oorsig', members: 'Lede', activity: 'Lewende aktiwiteit', payments: 'Betalings', waitlist: 'Waglys',
     community: 'Gemeenskap', backmi: 'BackMi', resellers: 'Herverkopers', audit: 'Ouditlog', system: 'Stelsel',
-    notifications: 'Kennisgewings', enablePush: 'Aktiveer stootkennisgewings', disablePush: 'Skakel stoot af', markAllRead: 'Merk almal gelees', noNotifications: 'Nog geen admin-kennisgewings nie.', pushEnabled: 'Stootkennisgewings is aan.',
+    notifications: 'Kennisgewings', enablePush: 'Aktiveer stootkennisgewings', disablePush: 'Skakel stoot af', markAllRead: 'Merk almal gelees', noNotifications: 'Nog geen admin-kennisgewings nie.', pushEnabled: 'Stootkennisgewings is aan.', removeUser: 'Verwyder gebruiker', removeConfirm: 'Verwyder hierdie gebruiker uit We-Rise? Hulle sal geblokkeer word om aan te meld en verloor lidtoegang. Betaling- en ouditrekords word behou.', removeDone: 'Gebruiker uit We-Rise verwyder.',
   },
 };
 
@@ -46,6 +46,24 @@ function urlBase64ToUint8Array(value) {
   return Uint8Array.from([...raw].map(char => char.charCodeAt(0)));
 }
 
+function notificationText(item, lang = 'en') {
+  if (item?.type !== 'new_member') return { title: item?.title || 'We-Rise Admin', body: item?.body || '' };
+  const meta = item?.metadata || {};
+  const name = String(meta.display_name || 'A new member');
+  const location = String(meta.location || '').trim();
+  const number = Number(meta.member_number || 0);
+  if (lang === 'af') {
+    return {
+      title: `${name}${location ? ` van ${location}` : ''} het pas aangesluit!`,
+      body: number > 0 ? `Lid #${number}` : 'Nuwe We-Rise-lid',
+    };
+  }
+  return {
+    title: `${name}${location ? ` from ${location}` : ''} just joined!`,
+    body: number > 0 ? `Member #${number}` : 'New We-Rise member',
+  };
+}
+
 function NotificationsBell({ lang = 'en', strings, onOpenMember }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState({ items: [], unread_count: 0, push_configured: false });
@@ -71,11 +89,11 @@ function NotificationsBell({ lang = 'en', strings, onOpenMember }) {
       const subscription = await registration.pushManager.getSubscription();
       if (!subscription) { setPushState('disabled'); return; }
       setPushState('enabled');
-      await apiRequest('/api/admin/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: subscription.toJSON() }) });
+      await apiRequest('/api/admin/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: subscription.toJSON(), locale: lang }) });
     } catch {
       setPushState('disabled');
     }
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     load(); syncExistingPush();
@@ -96,7 +114,7 @@ function NotificationsBell({ lang = 'en', strings, onOpenMember }) {
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(config.public_key) });
       }
-      await apiRequest('/api/admin/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: subscription.toJSON() }) });
+      await apiRequest('/api/admin/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: subscription.toJSON(), locale: lang }) });
       setPushState('enabled');
     } catch (e) { setError(e.message); }
     finally { setPushBusy(false); }
@@ -147,9 +165,12 @@ function NotificationsBell({ lang = 'en', strings, onOpenMember }) {
       <div className="admin-push-row"><div><HiBell /><span>{pushLabel}</span></div>{pushState === 'enabled' ? <button disabled={pushBusy} onClick={disablePush}>{strings.disablePush}</button> : !['blocked','unsupported'].includes(pushState) ? <button disabled={pushBusy || pushState === 'checking'} onClick={enablePush}>{strings.enablePush}</button> : null}</div>
       {error && <div className="admin-notification-error">{error}</div>}
       <div className="admin-notification-list">
-        {(data.items || []).length === 0 ? <div className="admin-notification-empty">{strings.noNotifications}</div> : (data.items || []).map(item => <button key={item.id} className={`admin-notification-item ${item.read ? '' : 'unread'}`} onClick={() => openNotification(item)}>
-          <span className="admin-notification-dot" /><div><strong>{item.title}</strong><p>{item.body}</p><time>{dateTime(item.created_at)}</time></div>
-        </button>)}
+        {(data.items || []).length === 0 ? <div className="admin-notification-empty">{strings.noNotifications}</div> : (data.items || []).map(item => {
+          const text = notificationText(item, lang);
+          return <button key={item.id} className={`admin-notification-item ${item.read ? '' : 'unread'}`} onClick={() => openNotification(item)}>
+            <span className="admin-notification-dot" /><div><strong>{text.title}</strong><p>{text.body}</p><time>{dateTime(item.created_at)}</time></div>
+          </button>;
+        })}
       </div>
     </div>}
   </div>;
@@ -178,7 +199,7 @@ function Overview({ data, refresh }) {
   </div>;
 }
 
-function Members({ focusMemberKey = '', onFocusConsumed }) {
+function Members({ focusMemberKey = '', onFocusConsumed, lang = 'en', strings }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
@@ -186,6 +207,7 @@ function Members({ focusMemberKey = '', onFocusConsumed }) {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [removing, setRemoving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -204,6 +226,26 @@ function Members({ focusMemberKey = '', onFocusConsumed }) {
     catch (e) { setSelected({ error: e.message }); }
   };
 
+  const removeMember = async (profile) => {
+    if (!profile?.member_key || profile?.role !== 'member') return;
+    if (!window.confirm(strings.removeConfirm)) return;
+    setRemoving(true);
+    try {
+      const result = await apiRequest(`/api/admin/members/${encodeURIComponent(profile.member_key)}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmation: 'REMOVE' }),
+      });
+      const extra = result?.billing_warning ? `
+
+${result.billing_warning}` : '';
+      window.alert(`${strings.removeDone}${extra}`);
+      setSelected(null);
+      await load();
+    } catch (e) {
+      window.alert(e.message || (lang === 'af' ? 'Die gebruiker kon nie verwyder word nie.' : 'The user could not be removed.'));
+    } finally { setRemoving(false); }
+  };
+
   useEffect(() => {
     if (!focusMemberKey) return;
     openMember(focusMemberKey);
@@ -217,11 +259,11 @@ function Members({ focusMemberKey = '', onFocusConsumed }) {
       <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Member</th><th>Role</th><th>Status</th><th>Joined</th><th>Last seen</th><th></th></tr></thead><tbody>{(data?.items || []).map(row => <tr key={row.member_key}><td><div className="admin-person"><span className="admin-mini-avatar">{row.avatar_url ? <img src={row.avatar_url} alt="" /> : String(row.display_name || 'W')[0]}</span><div><strong>{row.display_name}</strong><small>{row.email || 'No email'}</small></div></div></td><td><StatusPill value={row.role} /></td><td><StatusPill value={row.membership?.status} /></td><td>{dateOnly(row.created_at)}</td><td>{dateTime(row.last_seen_at)}</td><td><button className="admin-small-button" onClick={() => openMember(row.member_key)}><HiEye /> View</button></td></tr>)}</tbody></table></div>
       <div className="admin-pagination"><span>{Number(data?.total || 0).toLocaleString()} members</span><div><button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button><span>Page {page}</span><button disabled={!data?.has_more} onClick={() => setPage(p => p + 1)}>Next</button></div></div>
     </>}
-    {selected && <div className="admin-drawer-backdrop" onClick={() => setSelected(null)}><aside className="admin-drawer" onClick={e => e.stopPropagation()}><button className="admin-drawer-close" onClick={() => setSelected(null)}><HiXCircle /></button>{selected.loading ? <Loading /> : selected.error ? <Empty>{selected.error}</Empty> : <MemberDetail data={selected} />}</aside></div>}
+    {selected && <div className="admin-drawer-backdrop" onClick={() => setSelected(null)}><aside className="admin-drawer" onClick={e => e.stopPropagation()}><button className="admin-drawer-close" onClick={() => setSelected(null)}><HiXCircle /></button>{selected.loading ? <Loading /> : selected.error ? <Empty>{selected.error}</Empty> : <MemberDetail data={selected} onRemove={removeMember} removing={removing} strings={strings} />}</aside></div>}
   </div>;
 }
 
-function MemberDetail({ data }) {
+function MemberDetail({ data, onRemove, removing, strings }) {
   const p = data?.profile || {};
   const a = data?.auth || {};
   const m = data?.membership || {};
@@ -229,13 +271,15 @@ function MemberDetail({ data }) {
     <div className="admin-detail-hero">{p.avatar_url ? <img src={p.avatar_url} alt="Registration selfie" /> : <div className="admin-detail-placeholder">{String(p.display_name || 'W')[0]}</div>}<div><span className="eyebrow">MEMBER RECORD</span><h2>{p.display_name}</h2><p>{p.email || 'No email'}</p><StatusPill value={p.role} /> <StatusPill value={m.status} /></div></div>
     <div className="admin-detail-grid">
       <div><span>Email</span><strong>{p.email || '—'}</strong></div><div><span>Phone</span><strong>{a.phone || 'Not collected'}</strong></div>
-      <div><span>Joined</span><strong>{dateTime(p.created_at)}</strong></div><div><span>Last sign-in</span><strong>{dateTime(a.last_sign_in_at)}</strong></div>
-      <div><span>Email confirmed</span><strong>{dateTime(a.email_confirmed_at)}</strong></div><div><span>Last seen</span><strong>{dateTime(p.last_seen_at)}</strong></div>
-      <div><span>Membership status</span><strong>{m.status || '—'}</strong></div><div><span>Trial ends</span><strong>{dateTime(m.trial_ends_at)}</strong></div>
-      <div><span>Joining payment</span><strong>{dateTime(m.joining_paid_at)}</strong></div><div><span>Next billing</span><strong>{m.next_billing_date || '—'}</strong></div>
-      <div><span>Monthly amount</span><strong>{m.monthly_amount_zar ? money(m.monthly_amount_zar) : '—'}</strong></div><div><span>Paystack customer</span><strong className="admin-code">{p.paystack_customer_code || '—'}</strong></div>
-      <div><span>Subscription</span><strong className="admin-code">{p.subscription_code || '—'}</strong></div><div><span>Subscription status</span><strong>{p.subscription_status || '—'}</strong></div>
+      <div><span>Location</span><strong>{[p.city_town, p.province, p.country].filter(Boolean).join(', ') || '—'}</strong></div><div><span>Joined</span><strong>{dateTime(p.created_at)}</strong></div>
+      <div><span>Last sign-in</span><strong>{dateTime(a.last_sign_in_at)}</strong></div><div><span>Email confirmed</span><strong>{dateTime(a.email_confirmed_at)}</strong></div>
+      <div><span>Last seen</span><strong>{dateTime(p.last_seen_at)}</strong></div><div><span>Membership status</span><strong>{m.status || '—'}</strong></div>
+      <div><span>Trial ends</span><strong>{dateTime(m.trial_ends_at)}</strong></div><div><span>Joining payment</span><strong>{dateTime(m.joining_paid_at)}</strong></div>
+      <div><span>Next billing</span><strong>{m.next_billing_date || '—'}</strong></div><div><span>Monthly amount</span><strong>{m.monthly_amount_zar ? money(m.monthly_amount_zar) : '—'}</strong></div>
+      <div><span>Paystack customer</span><strong className="admin-code">{p.paystack_customer_code || '—'}</strong></div><div><span>Subscription</span><strong className="admin-code">{p.subscription_code || '—'}</strong></div>
+      <div><span>Subscription status</span><strong>{p.subscription_status || '—'}</strong></div>
     </div>
+    {p.role === 'member' && <div className="admin-remove-member-box"><div><strong>{strings.removeUser}</strong><p>{strings.removeConfirm}</p></div><button className="admin-danger-button" disabled={removing} onClick={() => onRemove?.(p)}><HiTrash /> {removing ? '...' : strings.removeUser}</button></div>}
     <h3>Recent payments</h3>
     {(data?.payments || []).length ? <div className="admin-table-wrap"><table className="admin-table compact"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Status</th></tr></thead><tbody>{data.payments.map(pay => <tr key={pay.id}><td>{dateTime(pay.verified_at || pay.created_at)}</td><td>{pay.purpose?.replaceAll('_', ' ')}</td><td>{money(pay.amount_gross_zar || pay.expected_amount_zar)}</td><td><StatusPill value={pay.status} /></td></tr>)}</tbody></table></div> : <Empty>No payment history yet.</Empty>}
   </div>;
@@ -325,7 +369,7 @@ export default function AdminDashboard({ lang = 'en', profile, onToggleLang, onL
   ], [strings]);
 
   const page = section === 'overview' ? (overviewError ? <Empty>{overviewError}</Empty> : !overview ? <Loading /> : <Overview data={overview} refresh={loadOverview} />)
-    : section === 'members' ? <Members focusMemberKey={focusMemberKey} onFocusConsumed={() => setFocusMemberKey('')} /> : section === 'activity' ? <Activity /> : section === 'payments' ? <Payments />
+    : section === 'members' ? <Members focusMemberKey={focusMemberKey} onFocusConsumed={() => setFocusMemberKey('')} lang={lang} strings={strings} /> : section === 'activity' ? <Activity /> : section === 'payments' ? <Payments />
     : section === 'waitlist' ? <WaitlistAdmin /> : section === 'community' ? <CommunityAdmin /> : section === 'backmi' ? <BackMiAdmin />
     : section === 'resellers' ? <ResellersAdmin /> : section === 'audit' ? <Audit /> : <SystemAdmin data={overview} />;
 

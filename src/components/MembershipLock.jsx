@@ -11,8 +11,8 @@ export default function MembershipLock({ lang, feature, membership, onMembership
         <h2>{lang === 'en' ? `${feature} is a member benefit` : `${feature} is ’n lidvoordeel`}</h2>
         <p>{trialEnded
         ? (lang === 'en'
-          ? 'Your 7-day free trial has ended. Complete your once-off joining payment to continue with full access.'
-          : 'Jou gratis proeftydperk van 7 dae is verby. Voltooi jou eenmalige aansluitingsbetaling om volle toegang voort te sit.')
+          ? 'Your 3-day free trial has ended. Complete your once-off joining payment to continue with full access.'
+          : 'Jou gratis proeftydperk van 3 dae is verby. Voltooi jou eenmalige aansluitingsbetaling om volle toegang voort te sit.')
         : (lang === 'en'
           ? 'Your membership needs attention before this feature can be used.'
           : 'Jou lidmaatskap kort aandag voordat hierdie funksie gebruik kan word.')}</p>

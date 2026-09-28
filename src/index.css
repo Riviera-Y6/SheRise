@@ -5829,3 +5829,17 @@ textarea.input {
     left: clamp(24px, 3vw, 48px);
   }
 }
+
+
+/* Admin member removal + registration location fields */
+.auth-location-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.auth-location-country { grid-column: 1 / -1; }
+.admin-remove-member-box { margin-top: 18px; padding: 14px; border: 1px solid rgba(255,85,110,.28); border-radius: 14px; background: rgba(255,65,95,.055); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.admin-remove-member-box strong { color: #ff9dad; display: block; margin-bottom: 4px; }
+.admin-remove-member-box p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+@media (max-width: 520px) {
+  .auth-location-grid { grid-template-columns: 1fr; gap: 0; }
+  .auth-location-country { grid-column: auto; }
+  .admin-remove-member-box { align-items: stretch; flex-direction: column; }
+  .admin-remove-member-box .admin-danger-button { width: 100%; justify-content: center; }
+}

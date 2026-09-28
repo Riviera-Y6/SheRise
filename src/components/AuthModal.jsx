@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { HiArrowLeft, HiCheckCircle, HiEye, HiEyeOff, HiLockClosed, HiMail, HiUser, HiX } from 'react-icons/hi';
+import { HiArrowLeft, HiCheckCircle, HiEye, HiEyeOff, HiGlobeAlt, HiLocationMarker, HiLockClosed, HiMail, HiUser, HiX } from 'react-icons/hi';
 import { authConfigured, supabase } from '../lib/supabase';
 
 const copy = {
@@ -31,6 +31,10 @@ const copy = {
     mismatch: 'Passwords do not match.',
     shortPassword: 'Use at least 8 characters for your password.',
     missingName: 'Please enter your full name.',
+    missingLocation: 'Please enter your province, city/town and country.',
+    province: 'Province / State',
+    cityTown: 'City / Town',
+    country: 'Country',
     config: 'Login is not configured yet. Add the Supabase frontend environment variables in Vercel.',
   },
   af: {
@@ -61,6 +65,10 @@ const copy = {
     mismatch: 'Die wagwoorde stem nie ooreen nie.',
     shortPassword: 'Gebruik ten minste 8 karakters vir jou wagwoord.',
     missingName: 'Voer asseblief jou volle naam in.',
+    missingLocation: 'Voer asseblief jou provinsie, stad/dorp en land in.',
+    province: 'Provinsie',
+    cityTown: 'Stad / Dorp',
+    country: 'Land',
     config: 'Aanmelding is nog nie gekonfigureer nie. Voeg die Supabase frontend omgewingsveranderlikes in Vercel by.',
   },
 };
@@ -70,6 +78,9 @@ export default function AuthModal({ open, mode: requestedMode = 'login', lang = 
   const [mode, setMode] = useState(requestedMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [province, setProvince] = useState('');
+  const [cityTown, setCityTown] = useState('');
+  const [country, setCountry] = useState('South Africa');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -110,6 +121,10 @@ export default function AuthModal({ open, mode: requestedMode = 'login', lang = 
       setError(strings.missingName);
       return;
     }
+    if (mode === 'register' && (!province.trim() || !cityTown.trim() || !country.trim())) {
+      setError(strings.missingLocation);
+      return;
+    }
     if ((mode === 'register' || mode === 'reset') && password.length < 8) {
       setError(strings.shortPassword);
       return;
@@ -133,7 +148,12 @@ export default function AuthModal({ open, mode: requestedMode = 'login', lang = 
           email: email.trim(),
           password,
           options: {
-            data: { display_name: name.trim() },
+            data: {
+              display_name: name.trim(),
+              province: province.trim(),
+              city_town: cityTown.trim(),
+              country: country.trim(),
+            },
             emailRedirectTo: window.location.origin,
           },
         });
@@ -207,6 +227,23 @@ export default function AuthModal({ open, mode: requestedMode = 'login', lang = 
               <span>{strings.email}</span>
               <div className="auth-input-wrap"><HiMail /><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" required /></div>
             </label>
+          )}
+
+          {mode === 'register' && (
+            <div className="auth-location-grid">
+              <label className="auth-field">
+                <span>{strings.province}</span>
+                <div className="auth-input-wrap"><HiLocationMarker /><input value={province} onChange={e => setProvince(e.target.value)} maxLength={80} autoComplete="address-level1" required /></div>
+              </label>
+              <label className="auth-field">
+                <span>{strings.cityTown}</span>
+                <div className="auth-input-wrap"><HiLocationMarker /><input value={cityTown} onChange={e => setCityTown(e.target.value)} maxLength={100} autoComplete="address-level2" required /></div>
+              </label>
+              <label className="auth-field auth-location-country">
+                <span>{strings.country}</span>
+                <div className="auth-input-wrap"><HiGlobeAlt /><input value={country} onChange={e => setCountry(e.target.value)} maxLength={80} autoComplete="country-name" required /></div>
+              </label>
+            </div>
           )}
 
           {mode !== 'forgot' && (

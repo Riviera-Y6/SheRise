@@ -35,7 +35,7 @@ const MAX_SUPPORT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 const PROFILE_PHOTO_BUCKET = 'we-rise-profile-photos';
 const SUPPORT_ATTACHMENT_BUCKET = 'we-rise-support-attachments';
 const SUPPORT_CATEGORIES = new Set(['account', 'profile_photo', 'technical', 'membership_payment', 'backmi', 'community_messages', 'safety', 'other']);
-const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
+const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, province, city_town, country, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -327,6 +327,9 @@ async function ensureMemberProfile(user) {
   if (!user?.id) throw new Error('Authenticated user is missing an id.');
   const now = new Date().toISOString();
   const email = String(user.email || '').trim().toLowerCase().slice(0, 320) || null;
+  const province = String(user?.user_metadata?.province || '').trim().slice(0, 80) || null;
+  const cityTown = String(user?.user_metadata?.city_town || '').trim().slice(0, 100) || null;
+  const country = String(user?.user_metadata?.country || '').trim().slice(0, 80) || null;
 
   const { data: existing, error: existingError } = await supabase.from('member_profiles')
     .select(PROFILE_COLUMNS)
@@ -341,6 +344,9 @@ async function ensureMemberProfile(user) {
       .update({
         auth_user_id: user.id,
         email,
+        province: existing.province || province,
+        city_town: existing.city_town || cityTown,
+        country: existing.country || country,
         role,
         membership_status: membership.status,
         updated_at: now,
@@ -355,12 +361,15 @@ async function ensureMemberProfile(user) {
 
   const settings = await getPaymentSettings();
   const trialStartedAt = new Date();
-  const trialEndsAt = new Date(trialStartedAt.getTime() + Number(settings.trial_days || 7) * 86400000);
+  const trialEndsAt = new Date(trialStartedAt.getTime() + Number(settings.trial_days || 3) * 86400000);
   const { data, error } = await supabase.from('member_profiles').insert({
     member_key: user.id,
     auth_user_id: user.id,
     email,
     display_name: profileNameFromUser(user),
+    province,
+    city_town: cityTown,
+    country,
     role: configuredRole(email),
     membership_status: 'trialing',
     trial_started_at: trialStartedAt.toISOString(),
@@ -466,23 +475,35 @@ async function sendAdminPush(notification) {
     const client = await getWebPushClient();
     if (!client) return;
     const { data: subscriptions, error } = await supabase.from('admin_push_subscriptions')
-      .select('id, endpoint, p256dh, auth');
+      .select('id, endpoint, p256dh, auth, locale');
     if (error) throw error;
     if (!subscriptions?.length) return;
-
-    const payload = JSON.stringify({
-      title: notification.title,
-      body: notification.body,
-      url: notification.url || '/admin',
-      type: notification.type,
-      member_key: notification.member_key || null,
-      notification_id: Number(notification.id),
-      tag: `we-rise-admin-${notification.id}`,
-    });
 
     const staleIds = [];
     await Promise.allSettled(subscriptions.map(async (row) => {
       try {
+        const af = String(row.locale || '').toLowerCase().startsWith('af');
+        const meta = notification.metadata || {};
+        const memberName = String(meta.display_name || '').trim();
+        const location = String(meta.location || '').trim();
+        const memberNumber = Number(meta.member_number || 0);
+        const localized = notification.type === 'new_member' && memberName ? {
+          title: af
+            ? `${memberName}${location ? ` van ${location}` : ''} het pas aangesluit!`
+            : `${memberName}${location ? ` from ${location}` : ''} just joined!`,
+          body: memberNumber > 0
+            ? (af ? `Lid #${memberNumber}` : `Member #${memberNumber}`)
+            : (af ? 'Nuwe We-Rise-lid' : 'New We-Rise member'),
+        } : { title: notification.title, body: notification.body };
+        const payload = JSON.stringify({
+          title: localized.title,
+          body: localized.body,
+          url: notification.url || '/admin',
+          type: notification.type,
+          member_key: notification.member_key || null,
+          notification_id: Number(notification.id),
+          tag: `we-rise-admin-${notification.id}`,
+        });
         await client.sendNotification({
           endpoint: row.endpoint,
           keys: { p256dh: row.p256dh, auth: row.auth },
@@ -908,13 +929,27 @@ app.post('/api/profile/photo', async (c) => {
     }
 
     if ((updated.role || 'member') === 'member') {
+      const { count: memberCount, error: countError } = await supabase.from('member_profiles')
+        .select('member_key', { count: 'exact', head: true })
+        .eq('role', 'member');
+      if (countError) console.error('Could not count members for admin notification:', countError.message);
+      const location = [updated.city_town, updated.province].filter(Boolean).join(', ') || updated.country || '';
+      const number = Number(memberCount || 0);
       await createAdminNotification({
         type: 'new_member',
         memberKey: updated.member_key,
-        title: 'New We-Rise member',
-        body: `${updated.display_name || 'A new member'} completed registration.`,
+        title: `${updated.display_name || 'A new member'}${location ? ` from ${location}` : ''} just joined!`,
+        body: number > 0 ? `Member #${number}` : 'New We-Rise member',
         url: '/admin',
-        metadata: { email: updated.email || null },
+        metadata: {
+          email: updated.email || null,
+          display_name: updated.display_name || null,
+          location: location || null,
+          city_town: updated.city_town || null,
+          province: updated.province || null,
+          country: updated.country || null,
+          member_number: number || null,
+        },
       });
     }
 
@@ -2638,6 +2673,7 @@ app.post('/api/admin/push/subscribe', async (c) => {
     if (!ADMIN_PUSH_CONFIGURED) return c.json({ error: 'Admin push notifications are not configured on Render yet.', code: 'PUSH_NOT_CONFIGURED' }, 503);
     const body = await c.req.json();
     const subscription = body?.subscription || body || {};
+    const pushLocale = String(body?.locale || 'en').toLowerCase().startsWith('af') ? 'af' : 'en';
     const endpoint = String(subscription.endpoint || '').trim();
     const p256dh = String(subscription.keys?.p256dh || '').trim();
     const authKey = String(subscription.keys?.auth || '').trim();
@@ -2651,6 +2687,7 @@ app.post('/api/admin/push/subscribe', async (c) => {
       p256dh: p256dh.slice(0, 1000),
       auth: authKey.slice(0, 1000),
       user_agent: String(c.req.header('user-agent') || '').slice(0, 500) || null,
+      locale: pushLocale,
       updated_at: now,
     }, { onConflict: 'endpoint' });
     if (error) throw error;
@@ -2846,6 +2883,86 @@ app.get('/api/admin/members', async (c) => {
   }
 });
 
+app.delete('/api/admin/members/:memberKey', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const memberKey = cleanMemberKey(c.req.param('memberKey'));
+    if (!memberKey) return c.json({ error: 'Invalid member id.' }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    if (body?.confirmation !== 'REMOVE') return c.json({ error: 'Removal confirmation is required.' }, 400);
+    if (memberKey === auth.memberKey) return c.json({ error: 'You cannot remove your own admin account.' }, 400);
+
+    const { data: target, error: targetError } = await supabase.from('member_profiles')
+      .select(PROFILE_COLUMNS)
+      .eq('member_key', memberKey)
+      .maybeSingle();
+    if (targetError) throw targetError;
+    if (!target) return c.json({ error: 'Member not found.' }, 404);
+    if ((target.role || 'member') !== 'member') {
+      return c.json({ error: 'Owner, admin and reviewer accounts cannot be removed from this screen.' }, 403);
+    }
+
+    if (target.auth_user_id) {
+      const { error: banError } = await supabase.auth.admin.updateUserById(target.auth_user_id, { ban_duration: '876000h' });
+      if (banError) throw new Error(`We-Rise could not block this account from signing in: ${banError.message}`);
+    }
+
+    let paystackCancelled = false;
+    let billingWarning = '';
+    if (target.payfast_subscription_token && !target.subscription_cancelled_at) {
+      if (PAYSTACK_CONFIGURED && target.paystack_email_token) {
+        try {
+          await disablePaystackSubscription(PAYSTACK_SECRET_KEY, target.payfast_subscription_token, target.paystack_email_token);
+          paystackCancelled = true;
+        } catch (error) {
+          billingWarning = `The user was removed, but Paystack subscription cancellation failed: ${error?.message || 'unknown error'}. Cancel it manually in Paystack.`;
+        }
+      } else {
+        billingWarning = 'The user was removed, but their Paystack subscription could not be cancelled automatically. Check Paystack manually.';
+      }
+    }
+
+    const now = new Date().toISOString();
+    const update = {
+      membership_status: 'suspended',
+      plan: 'free',
+      subscription_grace_ends_at: null,
+      updated_at: now,
+      ...(paystackCancelled ? {
+        payfast_subscription_status: 'cancelled',
+        subscription_cancelled_at: now,
+        subscription_status_updated_at: now,
+      } : {}),
+    };
+    const { data: updated, error: updateError } = await supabase.from('member_profiles')
+      .update(update)
+      .eq('member_key', memberKey)
+      .select(PROFILE_COLUMNS)
+      .single();
+    if (updateError) throw updateError;
+
+    await recordAdminAudit(auth, 'member_removed', 'member', memberKey, {
+      member_email: target.email || null,
+      member_name: target.display_name || null,
+      previous_membership_status: target.membership_status || null,
+      paystack_cancelled: paystackCancelled,
+      billing_warning: billingWarning || null,
+    });
+
+    return c.json({
+      success: true,
+      member_key: memberKey,
+      membership_status: updated.membership_status,
+      sign_in_blocked: Boolean(target.auth_user_id),
+      paystack_cancelled: paystackCancelled,
+      billing_warning: billingWarning || null,
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
 app.get('/api/admin/members/:memberKey', async (c) => {
   try {
     const auth = await adminContext(c);
@@ -2870,6 +2987,9 @@ app.get('/api/admin/members/:memberKey', async (c) => {
         member_key: profile.member_key,
         display_name: profile.display_name,
         email: profile.email,
+        province: profile.province || null,
+        city_town: profile.city_town || null,
+        country: profile.country || null,
         role: profile.role || 'member',
         membership_status: profile.membership_status,
         avatar_url: avatarUrl,
