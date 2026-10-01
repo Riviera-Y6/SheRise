@@ -1,6 +1,7 @@
 const translations = {
   en: {
     appName: 'We-Rise',
+    appCountry: 'South Africa',
     tagline: 'Rise Together. Rise Forever.',
     home: 'Home',
     aiAssistant: 'Ask We-Rise',
@@ -11,6 +12,7 @@ const translations = {
     waitlist: 'Waitlist',
     support: 'Support',
     resell: 'Resellers',
+    rentit: 'RentIt',
     settings: 'Settings',
     dailyAffirmation: "Today's Affirmation",
     welcomeBack: 'Welcome back',
@@ -128,6 +130,7 @@ const translations = {
   },
   af: {
     appName: 'We-Rise',
+    appCountry: 'Suid-Afrika',
     tagline: 'Styg Saam. Styg Altyd.',
     home: 'Tuis',
     aiAssistant: 'Vra We-Rise',
@@ -138,6 +141,7 @@ const translations = {
     waitlist: 'Waglys',
     support: 'Ondersteuning',
     resell: 'Herverkopers',
+    rentit: 'HuurDit',
     settings: 'Instellings',
     dailyAffirmation: 'Vandag se Bevestiging',
     welcomeBack: 'Welkom terug',

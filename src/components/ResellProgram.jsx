@@ -103,13 +103,12 @@ export default function ResellProgram({ t, lang, showToast }) {
         </button>
 
         <a
-          className="btn btn-secondary btn-full"
+          className="btn btn-full reseller-calculator-btn"
           href="https://we-rise-calculator.pages.dev/"
           target="_blank"
           rel="noopener noreferrer"
-          style={{ marginTop: 10, textDecoration: 'none' }}
         >
-          <HiCalculator /> {lang === 'en' ? 'We-Rise Calculator' : 'We-Rise Sakrekenaar'}
+          <span className="reseller-calculator-content"><HiCalculator /> {lang === 'en' ? 'We-Rise Calculator' : 'We-Rise Sakrekenaar'}</span>
         </a>
       </article>
 

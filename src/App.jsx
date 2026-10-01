@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport
+  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport, HiKey
 } from 'react-icons/hi';
 import translations from './i18n/translations';
 import { apiRequest, submitPaystackCheckout } from './lib/api';
@@ -11,6 +11,7 @@ import BackMi from './components/BackMi';
 import Community from './components/Community';
 import Messages from './components/Messages';
 import ResellProgram from './components/ResellProgram';
+import RentIt from './components/RentIt';
 import Journal from './components/Journal';
 import Safety from './components/Safety';
 import VisionBoard from './components/VisionBoard';
@@ -43,6 +44,7 @@ const TABS = [
   { id: 'waitlist', icon: HiUserAdd, labelKey: 'waitlist', public: true },
   { id: 'support', icon: HiSupport, labelKey: 'support', public: true },
   { id: 'resell', icon: HiCurrencyDollar, labelKey: 'resell' },
+  { id: 'rentit', icon: HiKey, labelKey: 'rentit' },
 ];
 
 const PROTECTED_FEATURE_COPY = {
@@ -54,6 +56,7 @@ const PROTECTED_FEATURE_COPY = {
   safety: { en: 'Safety & Emergency Network', af: 'Veiligheid & Noodnetwerk' },
   messages: { en: 'Private Messages', af: 'Privaat Boodskappe' },
   resell: { en: 'We-Rise Resellers', af: 'We-Rise Herverkopers' },
+  rentit: { en: 'RentIt', af: 'HuurDit' },
 };
 
 const normalizeCampaign = (campaign) => ({
@@ -335,7 +338,10 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-left">
           <BrandMark variant="compact" className="app-logo-icon" />
-          <span className="app-logo">We-Rise</span>
+          <div className="app-brand-copy">
+            <span className="app-logo">We-Rise</span>
+            <span className="app-country-label">{t.appCountry}</span>
+          </div>
         </div>
         <div className="app-header-actions">
           <button className="lang-toggle" onClick={toggleLang} aria-label="Toggle language">
@@ -442,6 +448,7 @@ export default function App() {
         {activeTab === 'waitlist' && <Waitlist lang={lang} userName={userName} showToast={showToast} />}
         {activeTab === 'support' && <Support lang={lang} user={user} profile={profile} />}
         {activeTab === 'resell' && renderPrivateFeature(<ResellProgram t={t} lang={lang} showToast={showToast} />)}
+        {activeTab === 'rentit' && renderPrivateFeature(<RentIt lang={lang} />)}
 
         {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen && isAuthenticated)) && <Footer t={t} />}
       </main>

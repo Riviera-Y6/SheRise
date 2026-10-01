@@ -142,14 +142,38 @@ h1, h2, h3, h4 {
   min-width: 0;
 }
 
+.app-brand-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  line-height: 1;
+}
+
 .app-logo {
   font-family: 'Playfair Display', serif;
   font-size: 22px;
   font-weight: 700;
+  line-height: 1.05;
   background: var(--gradient-pink);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.app-country-label {
+  margin-top: 3px;
+  padding-left: 1px;
+  font-family: 'Playfair Display', serif;
+  font-size: 8px;
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: var(--pink-light);
+  white-space: nowrap;
+  opacity: 0.9;
 }
 
 .app-logo-icon {
@@ -843,6 +867,81 @@ textarea.input {
 .reseller-referral-box > svg { color: var(--pink); flex-shrink: 0; }
 .reseller-referral-box input { width: 100%; min-width: 0; }
 .reseller-referral-box .btn { grid-column: 1 / -1; width: 100%; justify-content: center; white-space: nowrap; }
+
+
+/* High-visibility Reseller calculator CTA */
+.reseller-calculator-btn {
+  position: relative;
+  isolation: isolate;
+  min-height: 54px;
+  margin-top: 12px;
+  justify-content: center;
+  gap: 9px;
+  overflow: hidden;
+  text-decoration: none;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: .015em;
+  border: 1px solid rgba(255, 160, 214, .72);
+  background: linear-gradient(135deg, #ff2f9d 0%, #d92dba 48%, #8f5cff 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 105, 180, .12) inset,
+    0 8px 24px rgba(255, 47, 157, .28),
+    0 0 22px rgba(255, 105, 180, .42);
+  animation: reseller-calculator-glow 2.25s ease-in-out infinite;
+}
+
+.reseller-calculator-btn::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  inset: -45% auto -45% -28%;
+  width: 34%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent);
+  animation: reseller-calculator-shine 3.2s ease-in-out infinite;
+}
+
+.reseller-calculator-content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.reseller-calculator-btn svg {
+  font-size: 21px;
+  filter: drop-shadow(0 0 6px rgba(255,255,255,.42));
+}
+
+.reseller-calculator-btn:hover,
+.reseller-calculator-btn:focus-visible {
+  color: #fff;
+  transform: translateY(-1px) scale(1.01);
+  box-shadow:
+    0 0 0 1px rgba(255, 205, 232, .2) inset,
+    0 10px 30px rgba(255, 47, 157, .38),
+    0 0 32px rgba(255, 105, 180, .62);
+}
+
+@keyframes reseller-calculator-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,105,180,.12) inset, 0 8px 24px rgba(255,47,157,.25), 0 0 16px rgba(255,105,180,.32); }
+  50% { box-shadow: 0 0 0 1px rgba(255,205,232,.18) inset, 0 10px 30px rgba(255,47,157,.38), 0 0 30px rgba(255,105,180,.58); }
+}
+
+@keyframes reseller-calculator-shine {
+  0%, 58% { left: -35%; opacity: 0; }
+  66% { opacity: 1; }
+  86%, 100% { left: 115%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reseller-calculator-btn,
+  .reseller-calculator-btn::before { animation: none; }
+}
 
 .reseller-model-intro { margin-bottom: 17px; }
 .reseller-steps { display: grid; gap: 10px; }
@@ -5842,4 +5941,235 @@ textarea.input {
   .auth-location-country { grid-column: auto; }
   .admin-remove-member-box { align-items: stretch; flex-direction: column; }
   .admin-remove-member-box .admin-danger-button { width: 100%; justify-content: center; }
+}
+
+/* RentIt / HuurDit */
+.rentit-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  overflow-x: hidden;
+}
+.rentit-page * { box-sizing: border-box; min-width: 0; }
+
+.rentit-hero {
+  text-align: center;
+  padding: 22px 16px 8px;
+}
+.rentit-hero-icon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 19px;
+  color: #fff;
+  font-size: 29px;
+  background: linear-gradient(135deg, #ff2f9d, #be3cc3 55%, #7659ff);
+  box-shadow: 0 12px 30px rgba(255,47,157,.24), 0 0 26px rgba(255,105,180,.22);
+}
+.rentit-hero .section-title { margin: 5px auto 8px; max-width: 520px; }
+.rentit-hero .section-subtitle { margin: 0 auto; max-width: 520px; line-height: 1.65; }
+
+.rentit-price-card {
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
+  border: 1px solid rgba(255, 126, 196, .38);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at 88% 12%, rgba(142,92,255,.18), transparent 34%),
+    linear-gradient(145deg, rgba(255,47,157,.115), rgba(35,35,55,.96) 38%, rgba(28,28,47,.98));
+  box-shadow: 0 16px 44px rgba(0,0,0,.22), 0 0 28px rgba(255,47,157,.09);
+}
+.rentit-price-card::after {
+  content: '';
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  right: -70px;
+  bottom: -80px;
+  border-radius: 50%;
+  background: rgba(255,105,180,.09);
+  filter: blur(4px);
+  pointer-events: none;
+}
+.rentit-price-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--pink-light);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+.rentit-upfront-badge {
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,105,180,.22);
+  background: rgba(255,105,180,.08);
+  color: var(--text-secondary);
+  font-size: 8px;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.rentit-price {
+  margin: 8px 0 2px;
+  font-family: 'Playfair Display', Georgia, serif;
+  color: var(--pink);
+  font-size: clamp(38px, 10vw, 56px);
+  line-height: 1;
+  font-weight: 800;
+  text-shadow: 0 0 20px rgba(255,105,180,.16);
+}
+.rentit-price span { font-size: .42em; vertical-align: 35%; color: var(--pink-light); }
+.rentit-price-card > p { margin: 0 0 17px; color: var(--text-secondary); font-size: 11px; line-height: 1.55; }
+
+.rentit-money-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+}
+.rentit-money-box {
+  min-height: 82px;
+  padding: 12px 9px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 13px;
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.07);
+  text-align: center;
+}
+.rentit-money-box small { display: block; color: var(--text-muted); font-size: 8px; line-height: 1.3; margin-bottom: 5px; }
+.rentit-money-box strong { color: var(--text-primary); font-size: 14px; white-space: nowrap; }
+.rentit-money-earned { border-color: rgba(99,220,156,.18); background: rgba(99,220,156,.055); }
+.rentit-money-earned strong { color: #9fe6bd; }
+.rentit-money-balance { border-color: rgba(255,193,105,.18); background: rgba(255,193,105,.05); }
+.rentit-money-balance strong { color: #ffd19a; }
+.rentit-money-total { border-color: rgba(255,105,180,.24); background: rgba(255,105,180,.065); }
+.rentit-money-total strong { color: var(--pink-light); }
+.rentit-money-operator { color: var(--text-muted); font-size: 17px; font-weight: 700; }
+
+.rentit-clarifier {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255,255,255,.065);
+}
+.rentit-clarifier svg { flex: 0 0 auto; color: var(--pink); margin-top: 2px; }
+.rentit-clarifier p { margin: 0; color: var(--text-secondary); font-size: 9.5px; line-height: 1.6; }
+
+.rentit-how-card,
+.rentit-benefits-card,
+.rentit-rules-card { margin: 0; width: 100%; }
+.rentit-how-card h3,
+.rentit-benefits-card h3,
+.rentit-rules-card h3 { margin: 4px 0 14px; font-size: 16px; color: var(--text-primary); }
+.rentit-steps { display: grid; gap: 10px; }
+.rentit-step {
+  display: grid;
+  grid-template-columns: 23px 37px 1fr;
+  gap: 9px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,105,180,.11);
+  background: rgba(255,255,255,.026);
+}
+.rentit-step-number {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  background: var(--gradient-pink);
+}
+.rentit-step-icon {
+  width: 37px;
+  height: 37px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--pink-light);
+  font-size: 18px;
+  background: rgba(255,105,180,.08);
+}
+.rentit-step strong { display: block; color: var(--text-primary); font-size: 12px; margin: 1px 0 4px; }
+.rentit-step p { margin: 0; color: var(--text-secondary); font-size: 10.5px; line-height: 1.55; }
+
+.rentit-benefit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.rentit-benefit {
+  padding: 13px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.027);
+  border: 1px solid rgba(255,105,180,.1);
+}
+.rentit-benefit-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 9px;
+  border-radius: 10px;
+  color: var(--pink);
+  background: rgba(255,105,180,.08);
+  font-size: 17px;
+}
+.rentit-benefit strong { display: block; color: var(--text-primary); font-size: 11.5px; margin-bottom: 4px; }
+.rentit-benefit p { margin: 0; color: var(--text-secondary); font-size: 9.5px; line-height: 1.55; }
+
+.rentit-rules-heading { display: flex; gap: 11px; align-items: flex-start; }
+.rentit-rules-icon {
+  width: 39px;
+  height: 39px;
+  flex: 0 0 39px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--pink-light);
+  background: rgba(255,105,180,.08);
+  border: 1px solid rgba(255,105,180,.13);
+}
+.rentit-rules-card ul { margin: 4px 0 0; padding-left: 19px; }
+.rentit-rules-card li { margin: 0 0 8px; padding-left: 2px; color: var(--text-secondary); font-size: 10.5px; line-height: 1.55; }
+.rentit-rules-card li::marker { color: var(--pink); }
+
+.rentit-final-note {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 14px 15px;
+  border: 1px solid rgba(255,105,180,.16);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255,105,180,.06), rgba(142,92,255,.045));
+}
+.rentit-final-note > svg { flex: 0 0 auto; margin-top: 2px; color: var(--pink); font-size: 19px; }
+.rentit-final-note strong { display: block; color: var(--text-primary); font-size: 11px; margin-bottom: 3px; }
+.rentit-final-note p { margin: 0; color: var(--text-secondary); font-size: 9.5px; line-height: 1.55; }
+
+@media (max-width: 520px) {
+  .rentit-price-card { padding: 17px 14px; }
+  .rentit-money-flow {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+  .rentit-money-box { min-height: 66px; }
+  .rentit-money-operator { height: 8px; line-height: 8px; text-align: center; transform: rotate(90deg); font-size: 13px; }
+  .rentit-benefit-grid { grid-template-columns: 1fr; }
 }
