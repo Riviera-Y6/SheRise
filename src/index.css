@@ -153,7 +153,7 @@ h1, h2, h3, h4 {
 
 .app-logo {
   font-family: 'Playfair Display', serif;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1.05;
   background: var(--gradient-pink);
@@ -163,7 +163,7 @@ h1, h2, h3, h4 {
 }
 
 .app-country-label {
-  margin-top: 3px;
+  margin-top: 5px;
   padding-left: 1px;
   font-family: 'Playfair Display', serif;
   font-size: 8px;
@@ -4459,7 +4459,7 @@ textarea.input {
 
 @media (max-width: 400px) {
   .app-header { padding-left: 14px; padding-right: 14px; }
-  .app-logo { font-size: 19px; }
+  .app-logo { font-size: 21px; }
   .app-logo-icon { width: 34px; height: 34px; flex-basis: 34px; }
   .header-member-chip { max-width: 102px; }
   .header-member-name { max-width: 52px; }
@@ -5149,6 +5149,8 @@ textarea.input {
 .membership-status-card strong { color: #fff; font-size: 15px; }
 .membership-status-card.status-active { border-color: rgba(40,205,134,.25); background: linear-gradient(135deg, rgba(40,205,134,.10), rgba(44,35,67,.78)); }
 .membership-status-card.status-active .membership-status-icon { color: #49d998; background: rgba(40,205,134,.12); }
+.membership-status-card.status-complimentary { border-color: rgba(255,105,180,.26); background: linear-gradient(135deg, rgba(255,58,158,.10), rgba(44,35,67,.78)); }
+.membership-status-card.status-complimentary .membership-status-icon { color: var(--pink-light); background: rgba(255,58,158,.12); }
 .membership-price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .membership-price-card {
   display: grid;
@@ -6366,3 +6368,23 @@ textarea.input {
 .payment-status.payment-owed { color: #ffd18b; }
 .payment-status.payment-paid { color: #85e7a5; }
 .payment-status.payment-tracked { color: #b9a6ff; }
+
+
+/* Owner-only complimentary access management */
+.admin-free-access-panel { display: grid; gap: 12px; }
+.admin-free-access-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.admin-free-access-form .input { min-height: 42px; }
+.admin-free-access-error { padding: 9px 11px; border: 1px solid rgba(255,90,115,.18); border-radius: 9px; color: #ff9eaa; background: rgba(255,70,90,.06); font-size: 9px; }
+.admin-free-access-list { display: grid; gap: 8px; }
+.admin-free-access-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 14px; border: 1px solid rgba(255,105,180,.10); border-radius: 12px; background: rgba(30,29,48,.55); }
+.admin-free-access-row > div:first-child { min-width: 0; display: grid; gap: 3px; }
+.admin-free-access-row strong { overflow-wrap: anywhere; font-size: 10.5px; }
+.admin-free-access-row span { color: var(--text-secondary); font-size: 9px; overflow-wrap: anywhere; }
+.admin-free-access-row small { color: var(--text-muted); font-size: 8px; line-height: 1.4; }
+.admin-free-access-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.admin-free-access-actions > span { color: var(--text-muted); font-size: 8px; white-space: nowrap; }
+@media (max-width: 620px) {
+  .admin-free-access-form { grid-template-columns: 1fr; }
+  .admin-free-access-row { align-items: flex-start; flex-direction: column; }
+  .admin-free-access-actions { width: 100%; justify-content: space-between; }
+}

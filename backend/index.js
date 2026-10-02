@@ -130,6 +130,27 @@ function configuredRole(email) {
   return 'member';
 }
 
+function normalizeAccessEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  if (!email || email.length > 180 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return '';
+  return email;
+}
+
+async function hasComplimentaryAccess(email) {
+  const normalized = normalizeAccessEmail(email);
+  if (!normalized) return false;
+  const { data, error } = await supabase.from('admin_audit_log')
+    .select('action, created_at')
+    .eq('target_type', 'free_access_email')
+    .eq('target_key', normalized)
+    .in('action', ['free_access_granted', 'free_access_revoked'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.action === 'free_access_granted';
+}
+
 function isAdmin(profile) {
   return profile?.role === 'owner' || profile?.role === 'admin';
 }
@@ -146,6 +167,7 @@ function membershipSummary(profile) {
     ? new Date(`${profile.subscription_next_billing_date}T23:59:59.999Z`).getTime()
     : 0;
   const administrativeAccess = isReviewer(profile);
+  const complimentaryAccess = String(profile?.plan || '').toLowerCase() === 'complimentary';
   let status = String(profile?.membership_status || 'trialing');
 
   if (status === 'trialing' && trialEnd && trialEnd <= now) status = 'trial_expired';
@@ -156,7 +178,8 @@ function membershipSummary(profile) {
   const cancelledPaidThrough = status === 'cancelled' && paidThrough > now && Boolean(profile?.joining_paid_at);
   return {
     status,
-    access_allowed: administrativeAccess || trialActive || paidActive || cancelledPaidThrough || (status === 'past_due' && graceEnd > now),
+    access_allowed: administrativeAccess || complimentaryAccess || trialActive || paidActive || cancelledPaidThrough || (status === 'past_due' && graceEnd > now),
+    complimentary_access: complimentaryAccess,
     trial_active: trialActive,
     trial_started_at: profile?.trial_started_at || null,
     trial_ends_at: profile?.trial_ends_at || null,
@@ -659,7 +682,9 @@ async function ensureMemberProfile(user) {
 
   if (existing) {
     const role = configuredRole(email);
-    const membership = membershipSummary(existing);
+    const complimentaryAccess = role === 'member' ? await hasComplimentaryAccess(email) : false;
+    const effectivePlan = complimentaryAccess ? 'complimentary' : (existing.plan === 'complimentary' ? 'free' : (existing.plan || 'free'));
+    const membership = membershipSummary({ ...existing, plan: effectivePlan });
     const { data, error } = await supabase.from('member_profiles')
       .update({
         auth_user_id: user.id,
@@ -668,6 +693,7 @@ async function ensureMemberProfile(user) {
         city_town: existing.city_town || cityTown,
         country: existing.country || country,
         role,
+        plan: effectivePlan,
         membership_status: membership.status,
         updated_at: now,
         last_seen_at: now,
@@ -687,6 +713,8 @@ async function ensureMemberProfile(user) {
   }
 
   const settings = await getPaymentSettings();
+  const role = configuredRole(email);
+  const complimentaryAccess = role === 'member' ? await hasComplimentaryAccess(email) : false;
   const trialStartedAt = new Date();
   const trialEndsAt = new Date(trialStartedAt.getTime() + Number(settings.trial_days || 3) * 86400000);
   const { data, error } = await supabase.from('member_profiles').insert({
@@ -697,7 +725,8 @@ async function ensureMemberProfile(user) {
     province,
     city_town: cityTown,
     country,
-    role: configuredRole(email),
+    role,
+    plan: complimentaryAccess ? 'complimentary' : 'free',
     membership_status: 'trialing',
     trial_started_at: trialStartedAt.toISOString(),
     trial_ends_at: trialEndsAt.toISOString(),
@@ -771,6 +800,13 @@ async function adminContext(c) {
   const auth = await authContext(c);
   if (auth.response) return auth;
   if (!isAdmin(auth.profile)) return { ...auth, response: c.json({ error: 'We-Rise admin access is required.', code: 'ADMIN_REQUIRED' }, 403) };
+  return auth;
+}
+
+async function ownerContext(c) {
+  const auth = await authContext(c);
+  if (auth.response) return auth;
+  if (auth.profile?.role !== 'owner') return { ...auth, response: c.json({ error: 'We-Rise Owner access is required.', code: 'OWNER_REQUIRED' }, 403) };
   return auth;
 }
 
@@ -1475,6 +1511,7 @@ app.post('/api/billing/membership/checkout', async (c) => {
       }, 428);
     }
     const membership = auth.membership;
+    if (membership.complimentary_access) return c.json({ error: 'This account already has complimentary We-Rise access. No payment is required.', code: 'COMPLIMENTARY_ACCESS' }, 409);
     if (membership.status === 'active') return c.json({ error: 'Your We-Rise membership is already active.', code: 'ALREADY_ACTIVE' }, 409);
     if (membership.trial_active) {
       return c.json({
@@ -3246,6 +3283,120 @@ app.post('/api/admin/notifications/read-all', async (c) => {
     const { error } = await supabase.rpc('mark_all_admin_notifications_read', { p_admin_member_key: auth.memberKey });
     if (error) throw error;
     return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+
+app.get('/api/admin/free-access', async (c) => {
+  try {
+    const auth = await ownerContext(c);
+    if (auth.response) return auth.response;
+    const { data: events, error } = await supabase.from('admin_audit_log')
+      .select('id, actor_email, action, target_key, metadata, created_at')
+      .eq('target_type', 'free_access_email')
+      .in('action', ['free_access_granted', 'free_access_revoked'])
+      .order('created_at', { ascending: false })
+      .limit(5000);
+    if (error) throw error;
+
+    const latest = new Map();
+    for (const row of events || []) {
+      const email = normalizeAccessEmail(row.target_key);
+      if (email && !latest.has(email)) latest.set(email, row);
+    }
+    const activeRows = [...latest.entries()].filter(([, row]) => row.action === 'free_access_granted');
+    const emails = activeRows.map(([email]) => email);
+    let profiles = [];
+    if (emails.length) {
+      const profileResult = await supabase.from('member_profiles')
+        .select('member_key, email, display_name, membership_status, plan, created_at, last_seen_at')
+        .in('email', emails);
+      if (profileResult.error) throw profileResult.error;
+      profiles = profileResult.data || [];
+    }
+    const byEmail = new Map(profiles.map(row => [String(row.email || '').toLowerCase(), row]));
+    const items = activeRows.map(([email, row]) => {
+      const profile = byEmail.get(email) || null;
+      return {
+        email,
+        granted_at: row.created_at,
+        granted_by: row.actor_email || null,
+        registered: Boolean(profile),
+        member_key: profile?.member_key || null,
+        display_name: profile?.display_name || null,
+        membership_status: profile?.membership_status || null,
+        last_seen_at: profile?.last_seen_at || null,
+      };
+    }).sort((a, b) => new Date(b.granted_at || 0) - new Date(a.granted_at || 0));
+    return c.json({ items });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/admin/free-access', async (c) => {
+  try {
+    const auth = await ownerContext(c);
+    if (auth.response) return auth.response;
+    const body = await c.req.json().catch(() => ({}));
+    const email = normalizeAccessEmail(body?.email);
+    if (!email) return c.json({ error: 'Enter a valid email address.' }, 400);
+    if (OWNER_EMAILS.has(email) || ADMIN_EMAILS.has(email)) {
+      return c.json({ error: 'This email already has administrative access.' }, 409);
+    }
+    if (await hasComplimentaryAccess(email)) {
+      return c.json({ error: 'This email already has free We-Rise access.' }, 409);
+    }
+
+    const { data: profile, error: profileError } = await supabase.from('member_profiles')
+      .select('member_key, email, display_name, plan')
+      .eq('email', email)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (profile) {
+      const { error: updateError } = await supabase.from('member_profiles')
+        .update({ plan: 'complimentary', updated_at: new Date().toISOString() })
+        .eq('member_key', profile.member_key);
+      if (updateError) throw updateError;
+    }
+    await recordAdminAudit(auth, 'free_access_granted', 'free_access_email', email, {
+      member_key: profile?.member_key || null,
+      display_name: profile?.display_name || null,
+    });
+    return c.json({ success: true, email, registered: Boolean(profile), member_key: profile?.member_key || null });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/admin/free-access/revoke', async (c) => {
+  try {
+    const auth = await ownerContext(c);
+    if (auth.response) return auth.response;
+    const body = await c.req.json().catch(() => ({}));
+    const email = normalizeAccessEmail(body?.email);
+    if (!email) return c.json({ error: 'Enter a valid email address.' }, 400);
+    if (!(await hasComplimentaryAccess(email))) {
+      return c.json({ error: 'This email does not currently have free We-Rise access.' }, 404);
+    }
+    const { data: profile, error: profileError } = await supabase.from('member_profiles')
+      .select('member_key, email, display_name, plan')
+      .eq('email', email)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (profile?.plan === 'complimentary') {
+      const { error: updateError } = await supabase.from('member_profiles')
+        .update({ plan: 'free', updated_at: new Date().toISOString() })
+        .eq('member_key', profile.member_key);
+      if (updateError) throw updateError;
+    }
+    await recordAdminAudit(auth, 'free_access_revoked', 'free_access_email', email, {
+      member_key: profile?.member_key || null,
+      display_name: profile?.display_name || null,
+    });
+    return c.json({ success: true, email });
   } catch (error) {
     return fail(c, error);
   }

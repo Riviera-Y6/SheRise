@@ -38,6 +38,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
   const current = data?.membership || membership || {};
   const settings = data?.settings || {};
   const trialActive = current.status === 'trialing' && current.trial_active;
+  const complimentary = Boolean(current.complimentary_access || profile?.plan === 'complimentary');
   const active = current.status === 'active';
   const cancelledWithAccess = current.status === 'cancelled' && current.access_allowed;
   const canRestart = current.status === 'cancelled' && !current.access_allowed && Boolean(current.joining_paid_at);
@@ -112,11 +113,13 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
         <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}><HiRefresh /> {lang === 'en' ? 'Refresh' : 'Verfris'}</button>
       </div>
 
-      <div className={`membership-status-card status-${current.status || 'unknown'}`}>
-        <div className="membership-status-icon">{active ? <HiCheckCircle /> : <HiClock />}</div>
+      <div className={`membership-status-card status-${complimentary ? 'complimentary' : (current.status || 'unknown')}`}>
+        <div className="membership-status-icon">{active || complimentary ? <HiCheckCircle /> : <HiClock />}</div>
         <div>
           <span>{lang === 'en' ? 'Current status' : 'Huidige status'}</span>
-          <strong>{active
+          <strong>{complimentary
+            ? (lang === 'en' ? 'Free access granted by We-Rise' : 'Gratis toegang deur We-Rise toegestaan')
+            : active
             ? (lang === 'en' ? 'Active member' : 'Aktiewe lid')
             : cancelledWithAccess
               ? (lang === 'en' ? `Cancelled — access until ${dateText(current.access_ends_at)}` : `Gekanselleer — toegang tot ${dateText(current.access_ends_at)}`)
@@ -129,6 +132,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
                   : current.status === 'cancelled'
                     ? (lang === 'en' ? 'Membership cancelled' : 'Lidmaatskap gekanselleer')
                     : (lang === 'en' ? 'Trial ended' : 'Proeftydperk verby')}</strong>
+          {complimentary && <small>{lang === 'en' ? 'No membership payment is required while this access remains active.' : 'Geen lidmaatskapbetaling is nodig terwyl hierdie toegang aktief bly nie.'}</small>}
           {trialActive && <small>{lang === 'en' ? 'No payment is due during your trial.' : 'Geen betaling is tydens jou proeftydperk betaalbaar nie.'}</small>}
           {active && <small>{lang === 'en' ? `Next monthly date: ${dateText(current.next_billing_date)}` : `Volgende maandelikse datum: ${dateText(current.next_billing_date)}`}</small>}
           {current.status === 'past_due' && current.grace_ends_at && <small>{lang === 'en' ? `Please update payment details before ${dateText(current.grace_ends_at)}.` : `Dateer asseblief betalingsbesonderhede voor ${dateText(current.grace_ends_at)} op.`}</small>}
@@ -153,7 +157,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
         </article>
       </div>
 
-      {!active && !trialActive && (!current.joining_paid_at || canRestart) && (
+      {!complimentary && !active && !trialActive && (!current.joining_paid_at || canRestart) && (
         <div className="membership-checkout-card">
           <HiShieldCheck />
           <div>
@@ -189,7 +193,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
         </div>
       )}
 
-      {!active && current.joining_paid_at && !canRestart && (
+      {!complimentary && !active && current.joining_paid_at && !canRestart && (
         <div className="membership-checkout-card">
           <HiShieldCheck />
           <div><strong>{cancelledWithAccess

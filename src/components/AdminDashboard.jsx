@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   HiArrowLeft, HiCash, HiChartBar, HiCheckCircle, HiClock, HiCreditCard, HiDocumentDownload,
   HiExclamationCircle, HiEye, HiFilter, HiHome, HiInformationCircle, HiLockClosed, HiLogout,
-  HiBell, HiRefresh, HiSearch, HiShieldCheck, HiTrash, HiUserAdd, HiUsers, HiXCircle
+  HiBell, HiRefresh, HiSearch, HiShieldCheck, HiTrash, HiUserAdd, HiUsers, HiXCircle, HiKey
 } from 'react-icons/hi';
 import { apiRequest } from '../lib/api';
 import BrandMark from './BrandMark';
@@ -11,13 +11,13 @@ const copy = {
   en: {
     title: 'Admin Control Centre', subtitle: 'Members, money and activity in one secure place.', back: 'Back to We-Rise', logout: 'Log out',
     overview: 'Overview', members: 'Members', activity: 'Live activity', payments: 'Payments', waitlist: 'Waitlist',
-    community: 'Community', backmi: 'BackMi', referrals: 'Referrals & Earnings', audit: 'Audit log', system: 'System',
+    community: 'Community', backmi: 'BackMi', referrals: 'Referrals & Earnings', freeAccess: 'Free Access', audit: 'Audit log', system: 'System',
     notifications: 'Notifications', enablePush: 'Enable push notifications', disablePush: 'Disable push', markAllRead: 'Mark all read', noNotifications: 'No admin notifications yet.', pushEnabled: 'Push notifications are on.', removeUser: 'Remove user', removeConfirm: 'Remove this user from We-Rise? They will be blocked from signing in and lose member access. Payment and audit records are retained.', removeDone: 'User removed from We-Rise.',
   },
   af: {
     title: 'Admin Beheersentrum', subtitle: 'Lede, geld en aktiwiteit op een veilige plek.', back: 'Terug na We-Rise', logout: 'Meld af',
     overview: 'Oorsig', members: 'Lede', activity: 'Lewende aktiwiteit', payments: 'Betalings', waitlist: 'Waglys',
-    community: 'Gemeenskap', backmi: 'BackMi', referrals: 'Verwysings & Verdienste', audit: 'Ouditlog', system: 'Stelsel',
+    community: 'Gemeenskap', backmi: 'BackMi', referrals: 'Verwysings & Verdienste', freeAccess: 'Gratis Toegang', audit: 'Ouditlog', system: 'Stelsel',
     notifications: 'Kennisgewings', enablePush: 'Aktiveer stootkennisgewings', disablePush: 'Skakel stoot af', markAllRead: 'Merk almal gelees', noNotifications: 'Nog geen admin-kennisgewings nie.', pushEnabled: 'Stootkennisgewings is aan.', removeUser: 'Verwyder gebruiker', removeConfirm: 'Verwyder hierdie gebruiker uit We-Rise? Hulle sal geblokkeer word om aan te meld en verloor lidtoegang. Betaling- en ouditrekords word behou.', removeDone: 'Gebruiker uit We-Rise verwyder.',
   },
 };
@@ -380,6 +380,59 @@ function ReferralsAdmin({ lang = 'en' }) {
   </div>;
 }
 
+
+function FreeAccessAdmin({ lang = 'en' }) {
+  const [data, setData] = useState(null);
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try { setError(''); setData(await apiRequest('/api/admin/free-access')); }
+    catch (e) { setError(e.message); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const add = async (event) => {
+    event.preventDefault();
+    const value = email.trim().toLowerCase();
+    if (!value) return;
+    setBusy(true); setError('');
+    try {
+      await apiRequest('/api/admin/free-access', { method: 'POST', body: JSON.stringify({ email: value }) });
+      setEmail('');
+      await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const revoke = async (value) => {
+    const confirmed = window.confirm(lang === 'en'
+      ? `Remove free We-Rise access for ${value}?`
+      : `Verwyder gratis We-Rise-toegang vir ${value}?`);
+    if (!confirmed) return;
+    setBusy(true); setError('');
+    try {
+      await apiRequest('/api/admin/free-access/revoke', { method: 'POST', body: JSON.stringify({ email: value }) });
+      await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return <div className="admin-section-stack">
+    <div className="admin-section-heading"><div><h2>{lang === 'en' ? 'Free Access' : 'Gratis Toegang'}</h2><p>{lang === 'en' ? 'Owner-only access list. Add an email before or after the person creates their We-Rise account.' : 'Slegs vir eienaars. Voeg ’n e-pos by voor of nadat die persoon hul We-Rise-rekening skep.'}</p></div><button className="admin-icon-button" onClick={load} disabled={busy}><HiRefresh /></button></div>
+    <div className="admin-panel admin-free-access-panel">
+      <h3>{lang === 'en' ? 'Give someone free We-Rise access' : 'Gee iemand gratis We-Rise-toegang'}</h3>
+      <p className="admin-help-copy">{lang === 'en' ? 'They still use their own login and permanent registration selfie. No Paystack payment is created or faked.' : 'Hulle gebruik steeds hul eie aanmelding en permanente registrasie-selfie. Geen Paystack-betaling word geskep of nageboots nie.'}</p>
+      <form className="admin-free-access-form" onSubmit={add}>
+        <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={lang === 'en' ? 'person@example.com' : 'persoon@voorbeeld.com'} autoComplete="off" required />
+        <button className="btn btn-primary" type="submit" disabled={busy || !email.trim()}><HiUserAdd /> {busy ? '...' : (lang === 'en' ? 'Give free access' : 'Gee gratis toegang')}</button>
+      </form>
+      {error && <div className="admin-free-access-error">{error}</div>}
+    </div>
+    {!data ? <Loading /> : !(data.items || []).length ? <Empty>{lang === 'en' ? 'No complimentary-access emails yet.' : 'Nog geen gratis-toegang e-posadresse nie.'}</Empty> : <div className="admin-free-access-list">{data.items.map(item => <div className="admin-free-access-row" key={item.email}><div><strong>{item.display_name || item.email}</strong><span>{item.display_name ? item.email : (lang === 'en' ? 'Not registered yet' : 'Nog nie geregistreer nie')}</span><small>{item.registered ? (lang === 'en' ? `Registered · ${item.membership_status || 'member'}` : `Geregistreer · ${item.membership_status || 'lid'}`) : (lang === 'en' ? 'Access will activate automatically when this email registers.' : 'Toegang sal outomaties aktiveer wanneer hierdie e-pos registreer.')}</small></div><div className="admin-free-access-actions"><span>{dateOnly(item.granted_at)}</span><button className="admin-danger-button" onClick={() => revoke(item.email)} disabled={busy}><HiTrash /> {lang === 'en' ? 'Remove' : 'Verwyder'}</button></div></div>)}</div>}
+  </div>;
+}
+
 function Audit() {
   const [data, setData] = useState(null); const [error, setError] = useState('');
   const load = useCallback(async () => { try { setError(''); setData(await apiRequest('/api/admin/audit?limit=250')); } catch (e) { setError(e.message); } }, []);
@@ -406,16 +459,21 @@ export default function AdminDashboard({ lang = 'en', profile, onToggleLang, onL
   useEffect(() => { loadOverview(); }, [loadOverview]);
   useEffect(() => { if (Number.isInteger(initialNotificationId) && initialNotificationId > 0) apiRequest(`/api/admin/notifications/${initialNotificationId}/read`, { method: 'POST', body: '{}' }).catch(() => {}); }, [initialNotificationId]);
 
-  const sections = useMemo(() => [
-    ['overview', strings.overview, HiHome], ['members', strings.members, HiUsers], ['activity', strings.activity, HiClock],
-    ['payments', strings.payments, HiCreditCard], ['waitlist', strings.waitlist, HiUserAdd], ['community', strings.community, HiUsers],
-    ['backmi', strings.backmi, HiShieldCheck], ['referrals', strings.referrals, HiCash], ['audit', strings.audit, HiLockClosed], ['system', strings.system, HiChartBar],
-  ], [strings]);
+  const sections = useMemo(() => {
+    const base = [
+      ['overview', strings.overview, HiHome], ['members', strings.members, HiUsers], ['activity', strings.activity, HiClock],
+      ['payments', strings.payments, HiCreditCard], ['waitlist', strings.waitlist, HiUserAdd], ['community', strings.community, HiUsers],
+      ['backmi', strings.backmi, HiShieldCheck], ['referrals', strings.referrals, HiCash],
+    ];
+    if (profile?.role === 'owner') base.push(['free-access', strings.freeAccess, HiKey]);
+    base.push(['audit', strings.audit, HiLockClosed], ['system', strings.system, HiChartBar]);
+    return base;
+  }, [profile?.role, strings]);
 
   const page = section === 'overview' ? (overviewError ? <Empty>{overviewError}</Empty> : !overview ? <Loading /> : <Overview data={overview} refresh={loadOverview} />)
     : section === 'members' ? <Members focusMemberKey={focusMemberKey} onFocusConsumed={() => setFocusMemberKey('')} lang={lang} strings={strings} /> : section === 'activity' ? <Activity /> : section === 'payments' ? <Payments />
     : section === 'waitlist' ? <WaitlistAdmin /> : section === 'community' ? <CommunityAdmin /> : section === 'backmi' ? <BackMiAdmin />
-    : section === 'referrals' ? <ReferralsAdmin lang={lang} /> : section === 'audit' ? <Audit /> : <SystemAdmin data={overview} />;
+    : section === 'referrals' ? <ReferralsAdmin lang={lang} /> : section === 'free-access' && profile?.role === 'owner' ? <FreeAccessAdmin lang={lang} /> : section === 'audit' ? <Audit /> : <SystemAdmin data={overview} />;
 
   const openMemberFromNotification = (memberKey) => {
     setFocusMemberKey(memberKey);
