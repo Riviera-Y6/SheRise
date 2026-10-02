@@ -1114,29 +1114,93 @@ textarea.input {
 /* Footer */
 .app-footer {
   text-align: center;
-  padding: 20px 16px;
+  padding: 18px 0 20px;
   border-top: 1px solid var(--border-color);
   margin-top: 8px;
+  overflow: hidden;
 }
 
-.footer-name {
+.footer-supporter-label {
   font-family: 'Playfair Display', serif;
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 16px 9px;
+  opacity: 0.78;
+}
+
+.footer-supporter-marquee {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  border-top: 1px solid rgba(255, 62, 157, 0.12);
+  border-bottom: 1px solid rgba(255, 62, 157, 0.12);
+  background: linear-gradient(90deg, rgba(255, 62, 157, 0.025), rgba(153, 92, 255, 0.05), rgba(255, 62, 157, 0.025));
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 7%, #000 93%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 7%, #000 93%, transparent 100%);
+}
+
+.footer-supporter-marquee-inner {
+  display: flex;
+  width: max-content;
+  animation: footerSupportersScroll 24s linear infinite;
+  will-change: transform;
+}
+
+.footer-supporter-marquee:hover .footer-supporter-marquee-inner {
+  animation-play-state: paused;
+}
+
+.footer-supporter-track {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.footer-supporter-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 12px;
   font-weight: 600;
   color: var(--pink-light);
-  margin-bottom: 4px;
+  letter-spacing: 0.015em;
+  padding: 0 13px;
+  text-shadow: 0 0 14px rgba(255, 62, 157, 0.16);
 }
 
-.footer-role {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
+.footer-supporter-dot {
+  color: var(--pink);
+  opacity: 0.45;
+  font-size: 9px;
+}
+
+@keyframes footerSupportersScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 
 .footer-rights {
+  padding: 0 16px;
   font-size: 10px;
   color: var(--text-muted);
   opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .footer-supporter-marquee-inner {
+    animation: none;
+  }
+
+  .footer-supporter-marquee {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 }
 
 /* Modal */
