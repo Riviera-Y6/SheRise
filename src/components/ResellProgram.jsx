@@ -1,11 +1,32 @@
-import React, { useState } from 'react';
-import { HiCalculator, HiCash, HiCheck, HiInformationCircle, HiLink, HiPlus, HiShare, HiTag } from 'react-icons/hi';
+import React, { useCallback, useEffect, useState } from 'react';
+import { HiCalculator, HiCash, HiCheck, HiInformationCircle, HiLink, HiPlus, HiRefresh, HiShare, HiTag } from 'react-icons/hi';
+import { apiRequest } from '../lib/api';
 
 export default function ResellProgram({ t, lang, showToast }) {
   const [copied, setCopied] = useState(false);
-  const resellLink = `${window.location.origin}/?ref=risewithme`;
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadReferral = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await apiRequest('/api/referrals/me?program=reseller');
+      setDashboard(data);
+    } catch (err) {
+      setError(err?.message || (lang === 'en' ? 'Could not load your referral link.' : 'Kon nie jou verwysingskakel laai nie.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [lang]);
+
+  useEffect(() => { loadReferral(); }, [loadReferral]);
+
+  const resellLink = dashboard?.program?.share_url || '';
 
   const handleCopy = async () => {
+    if (!resellLink) return;
     try {
       await navigator.clipboard.writeText(resellLink);
       setCopied(true);
@@ -17,18 +38,19 @@ export default function ResellProgram({ t, lang, showToast }) {
   };
 
   const handleShare = async () => {
+    if (!resellLink) return;
     if (navigator.share) {
       try {
         await navigator.share({
           title: 'We-Rise Resellers',
           text: lang === 'en'
-            ? 'Discover We-Rise through my Reseller link 💗'
-            : 'Ontdek We-Rise deur my Reseller-skakel 💗',
+            ? 'Discover We-Rise through my personal Reseller link 💗'
+            : 'Ontdek We-Rise deur my persoonlike Reseller-skakel 💗',
           url: resellLink,
         });
         return;
-      } catch (error) {
-        if (error?.name === 'AbortError') return;
+      } catch (shareError) {
+        if (shareError?.name === 'AbortError') return;
       }
     }
     await handleCopy();
@@ -36,39 +58,17 @@ export default function ResellProgram({ t, lang, showToast }) {
 
   const steps = lang === 'en'
     ? [
-        {
-          icon: HiTag,
-          title: 'Buy at the baseline price',
-          description: 'The current We-Rise or TrendShop product price is the starting baseline for the Reseller.',
-        },
-        {
-          icon: HiShare,
-          title: 'Own it and resell it',
-          description: 'The Reseller purchases the product, takes ownership of it and can sell it repeatedly under the applicable Reseller terms.',
-        },
-        {
-          icon: HiPlus,
-          title: 'Add your own profit amount',
-          description: 'The Reseller adds her chosen amount above the baseline when setting her customer price. That amount is her profit—not commission.',
-        },
+        { icon: HiTag, title: 'Buy at the baseline price', description: 'The current We-Rise or TrendShop product price is the starting baseline for the Reseller.' },
+        { icon: HiShare, title: 'Use your own tracked link', description: 'Your We-Rise link identifies members who came through you. First valid referral attribution is stored permanently when the new member creates her account.' },
+        { icon: HiPlus, title: 'Add your own profit amount', description: 'The Reseller adds her chosen amount above the baseline when setting her customer price. That amount is her profit—not a hard-coded We-Rise commission.' },
       ]
     : [
-        {
-          icon: HiTag,
-          title: 'Koop teen die basisprys',
-          description: 'Die huidige We-Rise- of TrendShop-produkprys is die begin-basisprys vir die Reseller.',
-        },
-        {
-          icon: HiShare,
-          title: 'Besit dit en herverkoop dit',
-          description: 'Die Reseller koop die produk, neem eienaarskap daarvan en kan dit herhaaldelik volgens die toepaslike Reseller-voorwaardes verkoop.',
-        },
-        {
-          icon: HiPlus,
-          title: 'Voeg jou eie winsbedrag by',
-          description: 'Die Reseller voeg haar gekose bedrag bo-op die basisprys wanneer sy haar kliëntprys bepaal. Daardie bedrag is haar wins—nie kommissie nie.',
-        },
+        { icon: HiTag, title: 'Koop teen die basisprys', description: 'Die huidige We-Rise- of TrendShop-produkprys is die begin-basisprys vir die Reseller.' },
+        { icon: HiShare, title: 'Gebruik jou eie naspeurbare skakel', description: 'Jou We-Rise-skakel identifiseer lede wat deur jou gekom het. Die eerste geldige verwysing word permanent gestoor wanneer die nuwe lid haar rekening skep.' },
+        { icon: HiPlus, title: 'Voeg jou eie winsbedrag by', description: 'Die Reseller voeg haar gekose bedrag bo-op die basisprys wanneer sy haar kliëntprys bepaal. Daardie bedrag is haar wins—nie ’n hardgekodeerde We-Rise-kommissie nie.' },
       ];
+
+  const stats = dashboard?.stats || {};
 
   return (
     <section className="reseller-page fade-in">
@@ -77,37 +77,42 @@ export default function ResellProgram({ t, lang, showToast }) {
         <div className="eyebrow">WE-RISE RESELLERS</div>
         <h2 className="section-title">{lang === 'en' ? 'Own it. Price it. Resell it.' : 'Besit dit. Prys dit. Herverkoop dit.'}</h2>
         <p className="section-subtitle">{lang === 'en'
-          ? 'Purchase a product, take ownership and build your own profit through repeated sales. This is not a commission model.'
-          : 'Koop ’n produk, neem eienaarskap en bou jou eie wins deur herhaalde verkope. Dit is nie ’n kommissiemodel nie.'}</p>
+          ? 'Purchase a product, take ownership and build your own profit through repeated sales. Your personal link now tracks which new members came through you.'
+          : 'Koop ’n produk, neem eienaarskap en bou jou eie wins deur herhaalde verkope. Jou persoonlike skakel hou nou rekord van watter nuwe lede deur jou gekom het.'}</p>
       </header>
 
       <article className="card reseller-link-card">
         <div className="reseller-card-heading">
           <div className="reseller-card-icon"><HiLink /></div>
           <div>
-            <h3>{lang === 'en' ? 'Your Resell link' : 'Jou Resell-skakel'}</h3>
-            <p>{lang === 'en' ? 'Copy or share your link when presenting the product to a customer.' : 'Kopieer of deel jou skakel wanneer jy die produk aan ’n kliënt bekendstel.'}</p>
+            <h3>{lang === 'en' ? 'Your personal Reseller link' : 'Jou persoonlike Reseller-skakel'}</h3>
+            <p>{lang === 'en' ? 'Use this exact link so We-Rise can attribute a new member to you.' : 'Gebruik hierdie presiese skakel sodat We-Rise ’n nuwe lid aan jou kan toeskryf.'}</p>
           </div>
         </div>
 
-        <div className="referral-box reseller-referral-box">
-          <HiLink aria-hidden="true" />
-          <input aria-label={t.yourLink} type="text" value={resellLink} readOnly />
-          <button className="btn btn-primary btn-sm" onClick={handleCopy}>
-            {copied ? <HiCheck /> : <HiLink />} {copied ? t.copied : t.copyLink}
+        {loading ? <div className="referral-engine-loading"><span className="admin-spinner" /> {lang === 'en' ? 'Creating your secure link…' : 'Skep jou veilige skakel…'}</div> : error ? (
+          <div className="referral-engine-error"><span>{error}</span><button className="btn btn-secondary btn-sm" onClick={loadReferral}><HiRefresh /> {lang === 'en' ? 'Retry' : 'Probeer weer'}</button></div>
+        ) : <>
+          <div className="referral-box reseller-referral-box">
+            <HiLink aria-hidden="true" />
+            <input aria-label={t.yourLink} type="text" value={resellLink} readOnly />
+            <button className="btn btn-primary btn-sm" onClick={handleCopy} disabled={!resellLink}>
+              {copied ? <HiCheck /> : <HiLink />} {copied ? t.copied : t.copyLink}
+            </button>
+          </div>
+
+          <button className="btn btn-primary btn-full" onClick={handleShare} disabled={!resellLink}>
+            <HiShare /> {lang === 'en' ? 'Share your Reseller link' : 'Deel jou Reseller-skakel'}
           </button>
-        </div>
 
-        <button className="btn btn-primary btn-full" onClick={handleShare}>
-          <HiShare /> {lang === 'en' ? 'Share your Reseller link' : 'Deel jou Reseller-skakel'}
-        </button>
+          <div className="referral-mini-stats">
+            <div><small>{lang === 'en' ? 'Link clicks' : 'Skakel-klikke'}</small><strong>{stats.clicks || 0}</strong></div>
+            <div><small>{lang === 'en' ? 'Registrations' : 'Registrasies'}</small><strong>{stats.registrations || 0}</strong></div>
+            <div><small>{lang === 'en' ? 'Verified conversions' : 'Geverifieerde omskakelings'}</small><strong>{stats.conversions || 0}</strong></div>
+          </div>
+        </>}
 
-        <a
-          className="btn btn-full reseller-calculator-btn"
-          href="https://we-rise-calculator.pages.dev/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a className="btn btn-full reseller-calculator-btn" href="https://we-rise-calculator.pages.dev/" target="_blank" rel="noopener noreferrer">
           <span className="reseller-calculator-content"><HiCalculator /> {lang === 'en' ? 'We-Rise Calculator' : 'We-Rise Sakrekenaar'}</span>
         </a>
       </article>
@@ -116,8 +121,8 @@ export default function ResellProgram({ t, lang, showToast }) {
         <div className="eyebrow">{lang === 'en' ? 'HOW RESELLING WORKS' : 'HOE HERVERKOOP WERK'}</div>
         <h3>{lang === 'en' ? 'The baseline + your profit amount' : 'Die basisprys + jou winsbedrag'}</h3>
         <p className="reseller-model-intro">{lang === 'en'
-          ? 'The existing product price remains the baseline. A Reseller does not earn a percentage of that amount—she adds her chosen profit above it when setting her selling price.'
-          : 'Die bestaande produkprys bly die basisprys. ’n Reseller verdien nie ’n persentasie van daardie bedrag nie—sy voeg haar gekose wins bo-op wanneer sy haar verkoopprys bepaal.'}</p>
+          ? 'The existing product price remains the baseline. A Reseller does not automatically earn a fixed We-Rise commission—the reseller adds her chosen profit above the baseline when setting her selling price.'
+          : 'Die bestaande produkprys bly die basisprys. ’n Reseller verdien nie outomaties ’n vaste We-Rise-kommissie nie—die reseller voeg haar gekose wins bo-op wanneer sy haar verkoopprys bepaal.'}</p>
 
         <div className="reseller-steps">
           {steps.map(({ icon: Icon, title, description }, index) => (
@@ -132,23 +137,18 @@ export default function ResellProgram({ t, lang, showToast }) {
         <div className="reseller-example">
           <span>{lang === 'en' ? 'Illustrative example only' : 'Slegs ’n verduidelikende voorbeeld'}</span>
           <div className="reseller-equation">
-            <div><small>{lang === 'en' ? 'Baseline' : 'Basisprys'}</small><strong>R100</strong></div>
-            <b>+</b>
-            <div><small>{lang === 'en' ? 'Your profit' : 'Jou wins'}</small><strong>R40</strong></div>
-            <b>=</b>
+            <div><small>{lang === 'en' ? 'Baseline' : 'Basisprys'}</small><strong>R100</strong></div><b>+</b>
+            <div><small>{lang === 'en' ? 'Your profit' : 'Jou wins'}</small><strong>R40</strong></div><b>=</b>
             <div className="reseller-total"><small>{lang === 'en' ? 'Selling price' : 'Verkoopprys'}</small><strong>R140</strong></div>
           </div>
-          <p>{lang === 'en'
-            ? 'The R100 product price is the baseline. The Reseller sets the selling price at R140, with R40 added as her chosen profit—not commission.'
-            : 'Die R100-produkprys is die basisprys. Die Reseller stel die verkoopprys op R140, met R40 wat as haar gekose wins bygevoeg word—nie kommissie nie.'}</p>
         </div>
       </article>
 
       <div className="reseller-information-note">
         <HiInformationCircle />
         <p>{lang === 'en'
-          ? 'At this stage We-Rise provides the Resell link and explains the Reseller model. The app does not yet process Reseller sales automatically. The final selling price must always be communicated clearly to the customer before a sale.'
-          : 'Op hierdie stadium verskaf We-Rise die Resell-skakel en verduidelik die Reseller-model. Die toepassing verwerk nog nie Reseller-verkope outomaties nie. Die finale verkoopprys moet altyd voor ’n verkoop duidelik aan die kliënt gekommunikeer word.'}</p>
+          ? 'We-Rise now tracks referral attribution from your personal link. Direct visitors or people who register without your link are not assigned to you. Reseller profit remains based on the Reseller pricing model rather than an automatic We-Rise commission payout.'
+          : 'We-Rise hou nou verwysingstoewysing vanaf jou persoonlike skakel dop. Direkte besoekers of mense wat sonder jou skakel registreer, word nie aan jou toegewys nie. Reseller-wins bly gebaseer op die Reseller-prysmodel eerder as ’n outomatiese We-Rise-kommissie-uitbetaling.'}</p>
       </div>
     </section>
   );

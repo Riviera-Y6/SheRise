@@ -11,13 +11,13 @@ const copy = {
   en: {
     title: 'Admin Control Centre', subtitle: 'Members, money and activity in one secure place.', back: 'Back to We-Rise', logout: 'Log out',
     overview: 'Overview', members: 'Members', activity: 'Live activity', payments: 'Payments', waitlist: 'Waitlist',
-    community: 'Community', backmi: 'BackMi', resellers: 'Resellers', audit: 'Audit log', system: 'System',
+    community: 'Community', backmi: 'BackMi', referrals: 'Referrals & Earnings', audit: 'Audit log', system: 'System',
     notifications: 'Notifications', enablePush: 'Enable push notifications', disablePush: 'Disable push', markAllRead: 'Mark all read', noNotifications: 'No admin notifications yet.', pushEnabled: 'Push notifications are on.', removeUser: 'Remove user', removeConfirm: 'Remove this user from We-Rise? They will be blocked from signing in and lose member access. Payment and audit records are retained.', removeDone: 'User removed from We-Rise.',
   },
   af: {
     title: 'Admin Beheersentrum', subtitle: 'Lede, geld en aktiwiteit op een veilige plek.', back: 'Terug na We-Rise', logout: 'Meld af',
     overview: 'Oorsig', members: 'Lede', activity: 'Lewende aktiwiteit', payments: 'Betalings', waitlist: 'Waglys',
-    community: 'Gemeenskap', backmi: 'BackMi', resellers: 'Herverkopers', audit: 'Ouditlog', system: 'Stelsel',
+    community: 'Gemeenskap', backmi: 'BackMi', referrals: 'Verwysings & Verdienste', audit: 'Ouditlog', system: 'Stelsel',
     notifications: 'Kennisgewings', enablePush: 'Aktiveer stootkennisgewings', disablePush: 'Skakel stoot af', markAllRead: 'Merk almal gelees', noNotifications: 'Nog geen admin-kennisgewings nie.', pushEnabled: 'Stootkennisgewings is aan.', removeUser: 'Verwyder gebruiker', removeConfirm: 'Verwyder hierdie gebruiker uit We-Rise? Hulle sal geblokkeer word om aan te meld en verloor lidtoegang. Betaling- en ouditrekords word behou.', removeDone: 'Gebruiker uit We-Rise verwyder.',
   },
 };
@@ -279,6 +279,14 @@ function MemberDetail({ data, onRemove, removing, strings }) {
       <div><span>Paystack customer</span><strong className="admin-code">{p.paystack_customer_code || '—'}</strong></div><div><span>Subscription</span><strong className="admin-code">{p.subscription_code || '—'}</strong></div>
       <div><span>Subscription status</span><strong>{p.subscription_status || '—'}</strong></div>
     </div>
+    <div className="admin-panel admin-member-referral-panel">
+      <h3>Referral attribution</h3>
+      <div className="admin-kv"><span>Referred by</span><strong>{data?.referral?.attributed_by?.display_name || 'Direct / We-Rise'}</strong></div>
+      <div className="admin-kv"><span>Program</span><strong>{data?.referral?.program_used === 'huurdit' ? 'HuurDit / RentIt' : data?.referral?.program_used === 'reseller' ? 'Reseller' : '—'}</strong></div>
+      <div className="admin-kv"><span>Referral code used</span><strong className="admin-code">{data?.referral?.code_used || '—'}</strong></div>
+      <div className="admin-kv"><span>Attributed at</span><strong>{dateTime(data?.referral?.referred_at)}</strong></div>
+      {(data?.referral?.programs || []).length > 0 && <div className="admin-referral-program-list">{data.referral.programs.map(row => <div key={row.id}><span>{row.program_type === 'huurdit' ? 'HuurDit / RentIt' : 'Reseller'}</span><strong className="admin-code">{row.referral_code}</strong><StatusPill value={row.status} /></div>)}</div>}
+    </div>
     {p.role === 'member' && <div className="admin-remove-member-box"><div><strong>{strings.removeUser}</strong><p>{strings.removeConfirm}</p></div><button className="admin-danger-button" disabled={removing} onClick={() => onRemove?.(p)}><HiTrash /> {removing ? '...' : strings.removeUser}</button></div>}
     <h3>Recent payments</h3>
     {(data?.payments || []).length ? <div className="admin-table-wrap"><table className="admin-table compact"><thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Status</th></tr></thead><tbody>{data.payments.map(pay => <tr key={pay.id}><td>{dateTime(pay.verified_at || pay.created_at)}</td><td>{pay.purpose?.replaceAll('_', ' ')}</td><td>{money(pay.amount_gross_zar || pay.expected_amount_zar)}</td><td><StatusPill value={pay.status} /></td></tr>)}</tbody></table></div> : <Empty>No payment history yet.</Empty>}
@@ -298,7 +306,7 @@ function Payments() {
   const [data, setData] = useState(null); const [error, setError] = useState('');
   const load = useCallback(async () => { try { setError(''); const q = new URLSearchParams({ status, purpose, page: String(page), page_size: '40' }); setData(await apiRequest(`/api/admin/payments?${q}`)); } catch (e) { setError(e.message); } }, [page, purpose, status]);
   useEffect(() => { load(); }, [load]);
-  return <div className="admin-section-stack"><div className="admin-section-heading"><div><h2>Payments</h2><p>Verified Paystack transaction records stored by We-Rise.</p></div><button className="admin-icon-button" onClick={load}><HiRefresh /></button></div><div className="admin-toolbar"><label className="admin-select"><select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="all">All statuses</option><option value="complete">Complete</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="refunded">Refunded</option><option value="reversed">Reversed</option></select></label><label className="admin-select"><select value={purpose} onChange={e => { setPurpose(e.target.value); setPage(1); }}><option value="all">All payment types</option><option value="membership_joining">Joining fee</option><option value="membership_recurring">Monthly membership</option><option value="backmi_gift">BackMi gift</option></select></label></div>{error ? <Empty>{error}</Empty> : !data ? <Loading /> : <><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Gross</th><th>Fee</th><th>Net</th><th>Status</th></tr></thead><tbody>{(data.items || []).map(row => <tr key={row.id}><td>{dateTime(row.verified_at || row.created_at)}</td><td><strong>{row.member_name || 'Member'}</strong><small className="admin-table-sub">{row.member_email || row.member_key}</small></td><td>{row.purpose?.replaceAll('_', ' ')}</td><td>{money(row.amount_gross_zar || row.expected_amount_zar)}</td><td>{row.amount_fee_zar == null ? '—' : money(row.amount_fee_zar)}</td><td>{row.amount_net_zar == null ? '—' : money(row.amount_net_zar)}</td><td><StatusPill value={row.status} /></td></tr>)}</tbody></table></div><div className="admin-pagination"><span>{Number(data.total || 0).toLocaleString()} transactions</span><div><button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button><span>Page {page}</span><button disabled={!data.has_more} onClick={() => setPage(p => p + 1)}>Next</button></div></div></>}</div>;
+  return <div className="admin-section-stack"><div className="admin-section-heading"><div><h2>Payments</h2><p>Verified Paystack transaction records stored by We-Rise.</p></div><button className="admin-icon-button" onClick={load}><HiRefresh /></button></div><div className="admin-toolbar"><label className="admin-select"><select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="all">All statuses</option><option value="complete">Complete</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="refunded">Refunded</option><option value="reversed">Reversed</option></select></label><label className="admin-select"><select value={purpose} onChange={e => { setPurpose(e.target.value); setPage(1); }}><option value="all">All payment types</option><option value="membership_joining">Joining fee</option><option value="membership_recurring">Monthly membership</option><option value="backmi_gift">BackMi gift</option><option value="huurdit_activation">HuurDit / RentIt activation</option></select></label></div>{error ? <Empty>{error}</Empty> : !data ? <Loading /> : <><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Gross</th><th>Fee</th><th>Net</th><th>Status</th></tr></thead><tbody>{(data.items || []).map(row => <tr key={row.id}><td>{dateTime(row.verified_at || row.created_at)}</td><td><strong>{row.member_name || 'Member'}</strong><small className="admin-table-sub">{row.member_email || row.member_key}</small></td><td>{row.purpose?.replaceAll('_', ' ')}</td><td>{money(row.amount_gross_zar || row.expected_amount_zar)}</td><td>{row.amount_fee_zar == null ? '—' : money(row.amount_fee_zar)}</td><td>{row.amount_net_zar == null ? '—' : money(row.amount_net_zar)}</td><td><StatusPill value={row.status} /></td></tr>)}</tbody></table></div><div className="admin-pagination"><span>{Number(data.total || 0).toLocaleString()} transactions</span><div><button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button><span>Page {page}</span><button disabled={!data.has_more} onClick={() => setPage(p => p + 1)}>Next</button></div></div></>}</div>;
 }
 
 function WaitlistAdmin() {
@@ -329,11 +337,47 @@ function BackMiAdmin() {
   return <div className="admin-section-stack"><div className="admin-section-heading"><div><h2>BackMi</h2><p>Review queue and financial ledger visibility.</p></div><button className="admin-icon-button" onClick={load}><HiRefresh /></button></div>{error ? <Empty>{error}</Empty> : (!queue || !ledger) ? <Loading /> : <><div className="admin-summary-grid"><div className="admin-panel"><h3>Pending review</h3><div className="admin-big-value">{queue.length}</div></div>{Object.entries(ledger.balances || {}).slice(0,5).map(([key,value]) => <div className="admin-panel" key={key}><h3>{key.replaceAll('_',' ')}</h3><div className="admin-big-value">{money(value)}</div></div>)}</div><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Request</th><th>Creator</th><th>Goal</th><th>Status</th><th>Submitted</th></tr></thead><tbody>{queue.map(row => <tr key={row.id}><td>{row.request_code || row.id}</td><td>{row.creator}</td><td>{money(row.goal)}</td><td><StatusPill value={row.status} /></td><td>{dateTime(row.submitted_at || row.createdAt)}</td></tr>)}</tbody></table></div></>}</div>;
 }
 
-function ResellersAdmin() {
-  const [data, setData] = useState(null); const [error, setError] = useState('');
-  const load = useCallback(async () => { try { setError(''); setData(await apiRequest('/api/admin/resellers?limit=200')); } catch (e) { setError(e.message); } }, []);
+function ReferralsAdmin({ lang = 'en' }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState('');
+  const load = useCallback(async () => {
+    try {
+      setError('');
+      setData(await apiRequest('/api/admin/referrals?limit=500'));
+    } catch (e) { setError(e.message); }
+  }, []);
   useEffect(() => { load(); }, [load]);
-  return <div className="admin-section-stack"><div className="admin-section-heading"><div><h2>Resellers</h2><p>Referral records currently stored by We-Rise.</p></div><button className="admin-icon-button" onClick={load}><HiRefresh /></button></div>{error ? <Empty>{error}</Empty> : !data ? <Loading /> : <><div className="admin-metric-grid"><div className="admin-metric-card"><div className="admin-metric-icon"><HiUsers /></div><div><span>Referral records</span><strong>{data.total || 0}</strong></div></div><div className="admin-metric-card"><div className="admin-metric-icon"><HiCash /></div><div><span>Recorded commission</span><strong>{money(data.total_commission_zar)}</strong></div></div></div><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Referrer</th><th>Referred email</th><th>Commission</th><th>Status</th><th>Date</th></tr></thead><tbody>{(data.items || []).map(row => <tr key={row.id}><td><strong>{row.referrer_name || row.referrer}</strong><small className="admin-table-sub">{row.referrer_email || ''}</small></td><td>{row.referred_email || '—'}</td><td>{money(row.commission)}</td><td><StatusPill value={row.status} /></td><td>{dateTime(row.created_at)}</td></tr>)}</tbody></table></div></>}</div>;
+
+  const markPaid = async (row) => {
+    const reference = window.prompt(lang === 'af' ? 'Voer die EFT/uitbetalingsverwysing in:' : 'Enter the EFT/payout reference:');
+    if (!reference?.trim()) return;
+    setBusyId(row.id);
+    try {
+      await apiRequest(`/api/admin/referral-earnings/${row.id}/paid`, { method: 'POST', body: JSON.stringify({ payout_reference: reference.trim() }) });
+      await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusyId(''); }
+  };
+
+  const m = data?.metrics || {};
+  return <div className="admin-section-stack">
+    <div className="admin-section-heading"><div><h2>{lang === 'af' ? 'Verwysings & Verdienste' : 'Referrals & Earnings'}</h2><p>{lang === 'af' ? 'Unieke skakels, permanente toewysing en HuurDit-verdienste op geverifieerde Paystack-betalings.' : 'Unique links, permanent attribution and RentIt earnings from verified Paystack payments.'}</p></div><button className="admin-icon-button" onClick={load}><HiRefresh /></button></div>
+    {error ? <Empty>{error}</Empty> : !data ? <Loading /> : <>
+      <div className="admin-metric-grid">
+        <div className="admin-metric-card"><div className="admin-metric-icon"><HiUsers /></div><div><span>{lang === 'af' ? 'Aktiewe programme' : 'Active programs'}</span><strong>{m.program_members || 0}</strong></div></div>
+        <div className="admin-metric-card"><div className="admin-metric-icon"><HiCash /></div><div><span>Reseller</span><strong>{m.reseller_members || 0}</strong></div></div>
+        <div className="admin-metric-card"><div className="admin-metric-icon"><HiCash /></div><div><span>HuurDit / RentIt</span><strong>{m.huurdit_members || 0}</strong></div></div>
+        <div className="admin-metric-card"><div className="admin-metric-icon"><HiEye /></div><div><span>{lang === 'af' ? 'Skakel-klikke' : 'Link clicks'}</span><strong>{m.link_clicks || 0}</strong></div></div>
+        <div className="admin-metric-card"><div className="admin-metric-icon"><HiExclamationCircle /></div><div><span>{lang === 'af' ? 'Verskuldig' : 'Owed'}</span><strong>{money(m.owed_zar)}</strong></div></div>
+        <div className="admin-metric-card"><div className="admin-metric-icon"><HiCheckCircle /></div><div><span>{lang === 'af' ? 'Betaal' : 'Paid'}</span><strong>{money(m.paid_zar)}</strong></div></div>
+      </div>
+
+      <div className="admin-panel"><h3>{lang === 'af' ? 'Programskakels' : 'Program links'}</h3><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>{lang === 'af' ? 'Lid' : 'Member'}</th><th>{lang === 'af' ? 'Program' : 'Program'}</th><th>{lang === 'af' ? 'Kode' : 'Code'}</th><th>Status</th><th>{lang === 'af' ? 'Geaktiveer' : 'Activated'}</th></tr></thead><tbody>{(data.programs || []).map(row => <tr key={row.id}><td><strong>{row.member?.display_name || row.member_key}</strong><small className="admin-table-sub">{row.member?.email || ''}</small></td><td>{row.program_type === 'huurdit' ? 'HuurDit / RentIt' : 'Reseller'}</td><td className="admin-code">{row.referral_code}</td><td><StatusPill value={row.status} /></td><td>{dateTime(row.activated_at || row.created_at)}</td></tr>)}</tbody></table></div></div>
+
+      <div className="admin-panel"><h3>{lang === 'af' ? 'Toegeskrewe omskakelings & verdienste' : 'Attributed conversions & earnings'}</h3>{!(data.items || []).length ? <Empty>{lang === 'af' ? 'Nog geen toegeskrewe betalings nie.' : 'No attributed payments yet.'}</Empty> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>{lang === 'af' ? 'Verwyser' : 'Referrer'}</th><th>{lang === 'af' ? 'Nuwe lid' : 'New member'}</th><th>Program</th><th>{lang === 'af' ? 'Tipe' : 'Type'}</th><th>{lang === 'af' ? 'Verdienste' : 'Earning'}</th><th>Status</th><th>{lang === 'af' ? 'Aksie' : 'Action'}</th></tr></thead><tbody>{(data.items || []).map(row => <tr key={row.id}><td><strong>{row.referrer?.display_name || row.referrer_member_key}</strong><small className="admin-table-sub">{row.referrer?.email || ''}</small></td><td><strong>{row.referred?.display_name || row.referred_member_key}</strong><small className="admin-table-sub">{row.referred?.email || ''}</small></td><td>{row.program_type === 'huurdit' ? 'HuurDit / RentIt' : 'Reseller'}</td><td>{String(row.conversion_type || '').replaceAll('_', ' ')}</td><td>{Number(row.earning_amount_zar || 0) > 0 ? money(row.earning_amount_zar) : '—'}</td><td><StatusPill value={row.status} />{row.payout_reference && <small className="admin-table-sub">{row.payout_reference}</small>}</td><td>{row.status === 'owed' ? <button className="admin-action-small" disabled={busyId === row.id} onClick={() => markPaid(row)}><HiCheckCircle /> {busyId === row.id ? '…' : (lang === 'af' ? 'Merk betaal' : 'Mark paid')}</button> : '—'}</td></tr>)}</tbody></table></div>}</div>
+    </>}
+  </div>;
 }
 
 function Audit() {
@@ -365,13 +409,13 @@ export default function AdminDashboard({ lang = 'en', profile, onToggleLang, onL
   const sections = useMemo(() => [
     ['overview', strings.overview, HiHome], ['members', strings.members, HiUsers], ['activity', strings.activity, HiClock],
     ['payments', strings.payments, HiCreditCard], ['waitlist', strings.waitlist, HiUserAdd], ['community', strings.community, HiUsers],
-    ['backmi', strings.backmi, HiShieldCheck], ['resellers', strings.resellers, HiCash], ['audit', strings.audit, HiLockClosed], ['system', strings.system, HiChartBar],
+    ['backmi', strings.backmi, HiShieldCheck], ['referrals', strings.referrals, HiCash], ['audit', strings.audit, HiLockClosed], ['system', strings.system, HiChartBar],
   ], [strings]);
 
   const page = section === 'overview' ? (overviewError ? <Empty>{overviewError}</Empty> : !overview ? <Loading /> : <Overview data={overview} refresh={loadOverview} />)
     : section === 'members' ? <Members focusMemberKey={focusMemberKey} onFocusConsumed={() => setFocusMemberKey('')} lang={lang} strings={strings} /> : section === 'activity' ? <Activity /> : section === 'payments' ? <Payments />
     : section === 'waitlist' ? <WaitlistAdmin /> : section === 'community' ? <CommunityAdmin /> : section === 'backmi' ? <BackMiAdmin />
-    : section === 'resellers' ? <ResellersAdmin /> : section === 'audit' ? <Audit /> : <SystemAdmin data={overview} />;
+    : section === 'referrals' ? <ReferralsAdmin lang={lang} /> : section === 'audit' ? <Audit /> : <SystemAdmin data={overview} />;
 
   const openMemberFromNotification = (memberKey) => {
     setFocusMemberKey(memberKey);

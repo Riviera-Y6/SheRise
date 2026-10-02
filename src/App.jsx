@@ -198,6 +198,35 @@ export default function App() {
     refreshProfile();
   }, [refreshProfile]);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const rawCode = String(url.searchParams.get('ref') || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!rawCode) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resolved = await apiRequest(`/api/referrals/resolve/${encodeURIComponent(rawCode)}`);
+        if (cancelled || !resolved?.valid) return;
+        const existing = String(window.localStorage.getItem('we_rise_referral_code') || '').trim().toUpperCase();
+        if (!existing) window.localStorage.setItem('we_rise_referral_code', resolved.code || rawCode);
+        const clickKey = `we_rise_referral_click_${resolved.code || rawCode}`;
+        if (!window.sessionStorage.getItem(clickKey)) {
+          await apiRequest('/api/referrals/visit', { method: 'POST', body: JSON.stringify({ code: resolved.code || rawCode }) });
+          window.sessionStorage.setItem(clickKey, '1');
+        }
+        url.searchParams.delete('ref');
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+      } catch {
+        // Invalid or unavailable referral links never block normal We-Rise browsing.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) window.localStorage.removeItem('we_rise_referral_code');
+  }, [isAuthenticated]);
+
   const refreshCampaigns = useCallback(async () => {
     setCampaignsLoading(true);
     setCampaignsError(false);
@@ -221,11 +250,13 @@ export default function App() {
     const payment = params.get('payment');
     if (!payment) return;
     const paymentKind = params.get('kind');
-    setActiveTab(paymentKind === 'backmi' ? 'backmi' : 'membership');
+    setActiveTab(paymentKind === 'backmi' ? 'backmi' : paymentKind === 'rentit' ? 'rentit' : 'membership');
     showToast(payment === 'success'
       ? (paymentKind === 'backmi'
         ? (lang === 'en' ? 'Paystack returned you to BackMi. The gift will appear after secure confirmation.' : 'Paystack het jou na BackMi teruggestuur. Die geskenk sal ná veilige bevestiging verskyn.')
-        : (lang === 'en' ? 'Paystack returned you to We-Rise. We are waiting for secure payment confirmation.' : 'Paystack het jou na We-Rise teruggestuur. Ons wag vir die veilige betalingsbevestiging.'))
+        : paymentKind === 'rentit'
+          ? (lang === 'en' ? 'Paystack returned you to RentIt. Your HuurDit access will activate after secure confirmation.' : 'Paystack het jou na HuurDit teruggestuur. Jou HuurDit-toegang aktiveer ná veilige bevestiging.')
+          : (lang === 'en' ? 'Paystack returned you to We-Rise. We are waiting for secure payment confirmation.' : 'Paystack het jou na We-Rise teruggestuur. Ons wag vir die veilige betalingsbevestiging.'))
       : (lang === 'en' ? 'The Paystack checkout was cancelled. No payment is recorded.' : 'Die Paystack-betaling is gekanselleer. Geen betaling is aangeteken nie.'));
     window.history.replaceState({}, document.title, window.location.pathname);
     if (payment === 'success') {
@@ -448,7 +479,7 @@ export default function App() {
         {activeTab === 'waitlist' && <Waitlist lang={lang} userName={userName} showToast={showToast} />}
         {activeTab === 'support' && <Support lang={lang} user={user} profile={profile} />}
         {activeTab === 'resell' && renderPrivateFeature(<ResellProgram t={t} lang={lang} showToast={showToast} />)}
-        {activeTab === 'rentit' && renderPrivateFeature(<RentIt lang={lang} />)}
+        {activeTab === 'rentit' && renderPrivateFeature(<RentIt lang={lang} showToast={showToast} />)}
 
         {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen && isAuthenticated)) && <Footer t={t} />}
       </main>

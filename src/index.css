@@ -6173,3 +6173,132 @@ textarea.input {
   .rentit-money-operator { height: 8px; line-height: 8px; text-align: center; transform: rotate(90deg); font-size: 13px; }
   .rentit-benefit-grid { grid-template-columns: 1fr; }
 }
+
+/* Referral & Earnings Engine */
+.referral-engine-loading,
+.referral-engine-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 74px;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(255, 105, 180, .14);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, .025);
+  font-size: 10px;
+}
+.referral-engine-error { flex-wrap: wrap; justify-content: space-between; color: #ffb1bd; }
+.referral-mini-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.referral-mini-stats > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 11px 9px;
+  border: 1px solid rgba(255, 105, 180, .12);
+  border-radius: 11px;
+  text-align: center;
+  background: rgba(255, 105, 180, .035);
+}
+.referral-mini-stats small { color: var(--text-muted); font-size: 8px; line-height: 1.3; }
+.referral-mini-stats strong { color: #fff; font-size: 16px; }
+
+.rentit-activate-card,
+.rentit-referral-dashboard { display: grid; gap: 14px; }
+.rentit-activate-card h3,
+.rentit-referral-dashboard h3 { margin: 0; }
+.rentit-activate-card > p,
+.rentit-referral-dashboard > p { margin: 0; color: var(--text-secondary); line-height: 1.65; }
+.rentit-terms-check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 13px;
+  border: 1px solid rgba(255, 105, 180, .13);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: rgba(255, 105, 180, .035);
+  font-size: 9px;
+  line-height: 1.55;
+}
+.rentit-terms-check input { margin-top: 2px; accent-color: var(--pink); }
+.rentit-activate-btn { min-height: 48px; box-shadow: 0 0 28px rgba(255, 58, 154, .2); }
+.rentit-active-badge {
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid rgba(90, 220, 130, .22);
+  border-radius: 999px;
+  color: #9af0b4;
+  background: rgba(90, 220, 130, .07);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+.rentit-referral-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rentit-recent-referrals { display: grid; gap: 7px; margin-top: 5px; }
+.rentit-recent-referrals h4 { margin: 4px 0; font-family: Georgia, serif; font-size: 13px; }
+.rentit-referral-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.rentit-referral-row > div { min-width: 0; display: grid; gap: 3px; }
+.rentit-referral-row > div:last-child { justify-items: end; }
+.rentit-referral-row strong { overflow-wrap: anywhere; font-size: 9.5px; }
+.rentit-referral-row span { color: var(--text-muted); font-size: 8px; }
+
+.admin-action-small {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid rgba(90, 220, 130, .18);
+  border-radius: 8px;
+  color: #a7efbb;
+  background: rgba(90, 220, 130, .055);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.admin-action-small:disabled { opacity: .45; cursor: default; }
+.admin-member-referral-panel { display: grid; gap: 8px; }
+.admin-referral-program-list { display: grid; gap: 6px; margin-top: 5px; }
+.admin-referral-program-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255,255,255,.04);
+  font-size: 8.5px;
+}
+
+@media (max-width: 720px) {
+  .referral-mini-stats,
+  .rentit-referral-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rentit-referral-stats > div:last-child { grid-column: 1 / -1; }
+}
+.admin-status-owed { color: #ffd18b; border-color: rgba(255,185,80,.18); background: rgba(255,185,80,.06); }
+.admin-status-paid { color: #85e7a5; border-color: rgba(70,210,120,.18); background: rgba(70,210,120,.07); }
+.admin-status-tracked { color: #b9a6ff; border-color: rgba(150,115,255,.18); background: rgba(150,115,255,.07); }
+.payment-status.payment-owed { color: #ffd18b; }
+.payment-status.payment-paid { color: #85e7a5; }
+.payment-status.payment-tracked { color: #b9a6ff; }

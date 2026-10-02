@@ -142,8 +142,10 @@ export default function AuthModal({ open, mode: requestedMode = 'login', lang = 
           password,
         });
         if (authError) throw authError;
+        window.localStorage.removeItem('we_rise_referral_code');
         onClose?.();
       } else if (mode === 'register') {
+        const referralCode = String(window.localStorage.getItem('we_rise_referral_code') || '').trim().toUpperCase();
         const { data, error: authError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -153,11 +155,13 @@ export default function AuthModal({ open, mode: requestedMode = 'login', lang = 
               province: province.trim(),
               city_town: cityTown.trim(),
               country: country.trim(),
+              ...(referralCode ? { referral_code: referralCode } : {}),
             },
             emailRedirectTo: window.location.origin,
           },
         });
         if (authError) throw authError;
+        if (referralCode) window.localStorage.removeItem('we_rise_referral_code');
         if (data?.session) {
           onClose?.();
         } else {

@@ -35,7 +35,7 @@ const MAX_SUPPORT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 const PROFILE_PHOTO_BUCKET = 'we-rise-profile-photos';
 const SUPPORT_ATTACHMENT_BUCKET = 'we-rise-support-attachments';
 const SUPPORT_CATEGORIES = new Set(['account', 'profile_photo', 'technical', 'membership_payment', 'backmi', 'community_messages', 'safety', 'other']);
-const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, province, city_town, country, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, avatar_path, avatar_updated_at, profile_photo_completed_at, created_at, updated_at, last_seen_at';
+const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, province, city_town, country, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, avatar_path, avatar_updated_at, profile_photo_completed_at, referred_by_member_key, referral_code_used, referral_program_used, referred_at, created_at, updated_at, last_seen_at';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -194,6 +194,10 @@ function safeProfile(profile, avatarUrl = null) {
     avatar_updated_at: profile.avatar_updated_at || null,
     profile_photo_completed_at: profile.profile_photo_completed_at || null,
     photo_required: profilePhotoRequired(profile),
+    referred_by_member_key: profile.referred_by_member_key || null,
+    referral_code_used: profile.referral_code_used || null,
+    referral_program_used: profile.referral_program_used || null,
+    referred_at: profile.referred_at || null,
     created_at: profile.created_at,
     updated_at: profile.updated_at,
     last_seen_at: profile.last_seen_at,
@@ -250,6 +254,322 @@ function publicPaymentSettings(settings) {
     paystack_configured: PAYSTACK_CONFIGURED,
     subscription_management_enabled: Boolean(PAYSTACK_CONFIGURED),
     payouts_enabled: false,
+  };
+}
+
+
+function cleanReferralCode(value) {
+  const code = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return code.length >= 6 && code.length <= 32 ? code : '';
+}
+
+function cleanReferralProgram(value) {
+  const program = String(value || '').trim().toLowerCase();
+  return program === 'reseller' || program === 'huurdit' ? program : '';
+}
+
+async function getReferralProgramSetting(programType) {
+  const program = cleanReferralProgram(programType);
+  if (!program) throw new Error('Invalid We-Rise referral program.');
+  const { data, error } = await supabase.from('referral_program_settings')
+    .select('program_type, activation_fee_zar, referral_earning_zar, qualifying_payment_purpose, updated_at')
+    .eq('program_type', program)
+    .single();
+  if (error) throw error;
+  return {
+    ...data,
+    activation_fee_zar: Number(data.activation_fee_zar || 0),
+    referral_earning_zar: Number(data.referral_earning_zar || 0),
+  };
+}
+
+function referralShareUrl(code) {
+  const clean = cleanReferralCode(code);
+  return clean ? `${primaryFrontendUrl}/?ref=${encodeURIComponent(clean)}` : null;
+}
+
+async function ensureReferralProgram(memberKey, programType, options = {}) {
+  const program = cleanReferralProgram(programType);
+  const member = cleanMemberKey(memberKey);
+  if (!program || !member) throw new Error('Invalid referral program request.');
+  const desiredStatus = options.status === 'pending' ? 'pending' : 'active';
+  const { data: existing, error: existingError } = await supabase.from('referral_programs')
+    .select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, created_at, updated_at')
+    .eq('member_key', member)
+    .eq('program_type', program)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    if (desiredStatus === 'active' && existing.status !== 'active') {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase.from('referral_programs').update({
+        status: 'active',
+        activation_payment_id: options.activationPaymentId || existing.activation_payment_id || null,
+        activated_at: existing.activated_at || now,
+        updated_at: now,
+      }).eq('id', existing.id)
+        .select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, created_at, updated_at')
+        .single();
+      if (error) throw error;
+      return data;
+    }
+    return existing;
+  }
+
+  const prefix = program === 'huurdit' ? 'WRH' : 'WRR';
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const code = `${prefix}${randomUUID().replace(/-/g, '').slice(0, 9).toUpperCase()}`;
+    const now = new Date().toISOString();
+    const { data, error } = await supabase.from('referral_programs').insert({
+      member_key: member,
+      program_type: program,
+      referral_code: code,
+      status: desiredStatus,
+      activation_payment_id: options.activationPaymentId || null,
+      activated_at: desiredStatus === 'active' ? now : null,
+      updated_at: now,
+    }).select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, created_at, updated_at').single();
+    if (!error) return data;
+    if (error.code !== '23505') throw error;
+  }
+  throw new Error('Could not create a unique We-Rise referral code.');
+}
+
+async function claimReferralAttribution(memberKey, rawCode) {
+  const member = cleanMemberKey(memberKey);
+  const code = cleanReferralCode(rawCode);
+  if (!member || !code) return null;
+
+  const { data: target, error: targetError } = await supabase.from('member_profiles')
+    .select('member_key, referred_by_member_key, referral_code_used, referral_program_used, joining_paid_at, created_at')
+    .eq('member_key', member)
+    .maybeSingle();
+  if (targetError) throw targetError;
+  if (!target || target.referred_by_member_key || target.joining_paid_at) return target;
+  const createdAt = target.created_at ? new Date(target.created_at).getTime() : 0;
+  if (createdAt && Date.now() - createdAt > 48 * 60 * 60 * 1000) return target;
+
+  const { data: program, error } = await supabase.from('referral_programs')
+    .select('member_key, program_type, referral_code, status')
+    .eq('referral_code', code)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (error) throw error;
+  if (!program || program.member_key === member) return target;
+
+  const now = new Date().toISOString();
+  const { data: updated, error: updateError } = await supabase.from('member_profiles').update({
+    referred_by_member_key: program.member_key,
+    referral_code_used: program.referral_code,
+    referral_program_used: program.program_type,
+    referred_at: now,
+    updated_at: now,
+  }).eq('member_key', member)
+    .is('referred_by_member_key', null)
+    .select('member_key, referred_by_member_key, referral_code_used, referral_program_used, joining_paid_at, created_at')
+    .maybeSingle();
+  if (updateError) throw updateError;
+  return updated || target;
+}
+
+async function recordReferralConversionForPayment(transaction, paymentTransactionId) {
+  if (!transaction?.member_key || !transaction?.purpose || !paymentTransactionId) return null;
+
+  if (transaction.purpose === 'huurdit_activation') {
+    await ensureReferralProgram(transaction.member_key, 'huurdit', { status: 'active', activationPaymentId: paymentTransactionId });
+  }
+
+  if (!['membership_joining', 'huurdit_activation'].includes(transaction.purpose)) return null;
+  const { data: referred, error: memberError } = await supabase.from('member_profiles')
+    .select('member_key, referred_by_member_key, referral_code_used, referral_program_used, email, display_name')
+    .eq('member_key', transaction.member_key)
+    .maybeSingle();
+  if (memberError) throw memberError;
+  if (!referred?.referred_by_member_key || !referred?.referral_program_used) return null;
+  if (referred.referred_by_member_key === referred.member_key) return null;
+
+  const programType = cleanReferralProgram(referred.referral_program_used);
+  if (!programType) return null;
+  const [{ data: referrerProgram, error: programError }, setting] = await Promise.all([
+    supabase.from('referral_programs')
+      .select('id, member_key, program_type, referral_code, status')
+      .eq('member_key', referred.referred_by_member_key)
+      .eq('program_type', programType)
+      .maybeSingle(),
+    getReferralProgramSetting(programType),
+  ]);
+  if (programError) throw programError;
+  if (!referrerProgram || referrerProgram.status !== 'active') return null;
+
+  const qualifies = transaction.purpose === setting.qualifying_payment_purpose;
+  const earning = qualifies ? Number(setting.referral_earning_zar || 0) : 0;
+  const status = qualifies && earning > 0 ? 'owed' : 'tracked';
+  const now = new Date().toISOString();
+  const { data, error } = await supabase.from('referral_conversions').upsert({
+    referrer_member_key: referred.referred_by_member_key,
+    referred_member_key: referred.member_key,
+    referral_program_id: referrerProgram.id,
+    program_type: programType,
+    conversion_type: transaction.purpose,
+    qualifying_payment_id: paymentTransactionId,
+    earning_amount_zar: earning,
+    status,
+    qualified_at: qualifies ? now : null,
+    metadata: {
+      referred_email: referred.email || null,
+      referred_name: referred.display_name || null,
+      referral_code: referred.referral_code_used || referrerProgram.referral_code,
+      payment_purpose: transaction.purpose,
+    },
+    updated_at: now,
+  }, { onConflict: 'referred_member_key,conversion_type', ignoreDuplicates: true })
+    .select('id, status, earning_amount_zar')
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+
+async function handleReferralPaymentReversal(transaction) {
+  if (!transaction?.id || !transaction?.member_key || !transaction?.purpose) return;
+  const now = new Date().toISOString();
+
+  // If the member's own HuurDit activation is refunded, their referral licence
+  // must stop working immediately. Historical rows remain for audit purposes.
+  if (transaction.purpose === 'huurdit_activation') {
+    const { error: programError } = await supabase.from('referral_programs').update({
+      status: 'suspended',
+      updated_at: now,
+    })
+      .eq('member_key', transaction.member_key)
+      .eq('program_type', 'huurdit')
+      .eq('activation_payment_id', transaction.id);
+    if (programError) throw programError;
+  }
+
+  // Any unpaid earning that depended on the refunded payment is void. If an EFT
+  // was already paid, never rewrite history: keep it paid and flag it for admin
+  // review instead of silently clawing money back.
+  const { data: conversions, error } = await supabase.from('referral_conversions')
+    .select('id, referrer_member_key, referred_member_key, program_type, conversion_type, earning_amount_zar, status, payout_reference, metadata')
+    .eq('qualifying_payment_id', transaction.id);
+  if (error) throw error;
+
+  for (const conversion of conversions || []) {
+    const metadata = conversion.metadata && typeof conversion.metadata === 'object' ? conversion.metadata : {};
+    const refundMeta = {
+      ...metadata,
+      qualifying_payment_refunded: true,
+      qualifying_payment_refunded_at: now,
+    };
+
+    if (conversion.status === 'paid') {
+      const alreadyNotified = Boolean(metadata.qualifying_payment_refund_notified);
+      const { error: updateError } = await supabase.from('referral_conversions').update({
+        metadata: { ...refundMeta, qualifying_payment_refund_notified: true },
+        updated_at: now,
+      }).eq('id', conversion.id);
+      if (updateError) throw updateError;
+
+      if (!alreadyNotified && Number(conversion.earning_amount_zar || 0) > 0) {
+        await createAdminNotification({
+          type: 'referral_paid_earning_refunded',
+          memberKey: conversion.referred_member_key,
+          title: 'Referral earning needs review',
+          body: `A payment linked to an already-paid R${Number(conversion.earning_amount_zar || 0).toFixed(2)} referral earning was refunded. Review payout ${conversion.payout_reference || 'record'}.`,
+          url: '/admin',
+          metadata: {
+            conversion_id: conversion.id,
+            referrer_member_key: conversion.referrer_member_key,
+            referred_member_key: conversion.referred_member_key,
+            payout_reference: conversion.payout_reference || null,
+            payment_transaction_id: transaction.id,
+          },
+        });
+      }
+      continue;
+    }
+
+    if (conversion.status === 'owed' || conversion.status === 'tracked') {
+      const { error: updateError } = await supabase.from('referral_conversions').update({
+        status: 'void',
+        metadata: refundMeta,
+        updated_at: now,
+      }).eq('id', conversion.id);
+      if (updateError) throw updateError;
+    }
+  }
+}
+
+async function referralDashboardForMember(memberKey, programType, autoActivateReseller = false) {
+  const program = cleanReferralProgram(programType);
+  const member = cleanMemberKey(memberKey);
+  if (!program || !member) throw new Error('Invalid referral dashboard request.');
+  const setting = await getReferralProgramSetting(program);
+
+  let { data: programRow, error: programError } = await supabase.from('referral_programs')
+    .select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, created_at, updated_at')
+    .eq('member_key', member)
+    .eq('program_type', program)
+    .maybeSingle();
+  if (programError) throw programError;
+  if (!programRow && program === 'reseller' && autoActivateReseller) {
+    programRow = await ensureReferralProgram(member, 'reseller', { status: 'active' });
+  }
+
+  if (!programRow) {
+    return {
+      program: null,
+      settings: setting,
+      stats: { clicks: 0, registrations: 0, conversions: 0, earnings_owed_zar: 0, earnings_paid_zar: 0 },
+      recent: [],
+    };
+  }
+
+  const [clickResult, registrationResult, conversionResult] = await Promise.all([
+    supabase.from('referral_link_clicks').select('id', { count: 'exact', head: true }).eq('referral_program_id', programRow.id),
+    supabase.from('member_profiles').select('member_key', { count: 'exact', head: true }).eq('referred_by_member_key', member).eq('referral_program_used', program),
+    supabase.from('referral_conversions')
+      .select('id, referred_member_key, conversion_type, earning_amount_zar, status, qualified_at, paid_at, payout_reference, created_at')
+      .eq('referrer_member_key', member)
+      .eq('program_type', program)
+      .order('created_at', { ascending: false })
+      .limit(100),
+  ]);
+  if (clickResult.error) throw clickResult.error;
+  if (registrationResult.error) throw registrationResult.error;
+  if (conversionResult.error) throw conversionResult.error;
+
+  const conversions = conversionResult.data || [];
+  const referredKeys = [...new Set(conversions.map(row => row.referred_member_key).filter(Boolean))];
+  const memberMap = new Map();
+  if (referredKeys.length) {
+    const { data: rows, error } = await supabase.from('member_profiles')
+      .select('member_key, display_name, email, city_town, province, country, created_at')
+      .in('member_key', referredKeys);
+    if (error) throw error;
+    for (const row of rows || []) memberMap.set(row.member_key, row);
+  }
+
+  return {
+    program: {
+      ...programRow,
+      share_url: referralShareUrl(programRow.referral_code),
+    },
+    settings: setting,
+    stats: {
+      clicks: Number(clickResult.count || 0),
+      registrations: Number(registrationResult.count || 0),
+      conversions: conversions.filter(row => Boolean(row.qualified_at)).length,
+      earnings_owed_zar: conversions.filter(row => row.status === 'owed').reduce((sum, row) => sum + Number(row.earning_amount_zar || 0), 0),
+      earnings_paid_zar: conversions.filter(row => row.status === 'paid').reduce((sum, row) => sum + Number(row.earning_amount_zar || 0), 0),
+    },
+    recent: conversions.slice(0, 20).map(row => ({
+      ...row,
+      earning_amount_zar: Number(row.earning_amount_zar || 0),
+      referred_member: memberMap.get(row.referred_member_key) || null,
+    })),
   };
 }
 
@@ -356,6 +676,13 @@ async function ensureMemberProfile(user) {
       .select(PROFILE_COLUMNS)
       .single();
     if (error) throw error;
+    const incomingReferral = cleanReferralCode(user?.user_metadata?.referral_code);
+    if (!data.referred_by_member_key && incomingReferral) {
+      await claimReferralAttribution(user.id, incomingReferral);
+      const { data: refreshed, error: refreshError } = await supabase.from('member_profiles').select(PROFILE_COLUMNS).eq('member_key', user.id).single();
+      if (refreshError) throw refreshError;
+      return refreshed;
+    }
     return data;
   }
 
@@ -378,6 +705,13 @@ async function ensureMemberProfile(user) {
     last_seen_at: now,
   }).select(PROFILE_COLUMNS).single();
   if (error) throw error;
+  const incomingReferral = cleanReferralCode(user?.user_metadata?.referral_code);
+  if (!data.referred_by_member_key && incomingReferral) {
+    await claimReferralAttribution(user.id, incomingReferral);
+    const { data: refreshed, error: refreshError } = await supabase.from('member_profiles').select(PROFILE_COLUMNS).eq('member_key', user.id).single();
+    if (refreshError) throw refreshError;
+    return refreshed;
+  }
   return data;
 }
 
@@ -1523,7 +1857,10 @@ app.post('/api/paystack/webhook', async (c) => {
       }
 
       const result = await finalizeVerifiedPaystackCharge(event, verified, transaction, subscriptionCode, billingDate);
-      if (!result.ignored) await recordPaystackAudit({ event, transaction: result.transaction, transactionId: result.transactionId, reference: result.reference, subscriptionCode });
+      if (!result.ignored) {
+        await recordReferralConversionForPayment(result.transaction, result.transaction?.id);
+        await recordPaystackAudit({ event, transaction: result.transaction, transactionId: result.transactionId, reference: result.reference, subscriptionCode });
+      }
       return c.text('OK', 200);
     }
 
@@ -1649,6 +1986,7 @@ app.post('/api/paystack/webhook', async (c) => {
       });
       if (error) throw error;
       if (!data?.success) throw new Error('Paystack refund status could not be recorded.');
+      await handleReferralPaymentReversal(transaction);
       return c.text('OK', 200);
     }
 
@@ -2637,17 +2975,152 @@ app.post('/api/emergency-alerts', async (c) => {
   }
 });
 
-app.post('/api/referrals', async (c) => {
+app.get('/api/referrals/resolve/:code', async (c) => {
+  try {
+    const code = cleanReferralCode(c.req.param('code'));
+    if (!code) return c.json({ valid: false }, 404);
+    const { data: program, error } = await supabase.from('referral_programs')
+      .select('member_key, program_type, referral_code, status')
+      .eq('referral_code', code)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (error) throw error;
+    if (!program) return c.json({ valid: false }, 404);
+    const { data: member, error: memberError } = await supabase.from('member_profiles')
+      .select('display_name')
+      .eq('member_key', program.member_key)
+      .maybeSingle();
+    if (memberError) throw memberError;
+    return c.json({
+      valid: true,
+      code: program.referral_code,
+      program: program.program_type,
+      referrer_name: member?.display_name || null,
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/referrals/visit', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const code = cleanReferralCode(body?.code);
+    if (!code) return c.json({ success: false, valid: false }, 400);
+    const { data: program, error } = await supabase.from('referral_programs')
+      .select('id, referral_code')
+      .eq('referral_code', code)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (error) throw error;
+    if (!program) return c.json({ success: false, valid: false }, 404);
+    const { error: insertError } = await supabase.from('referral_link_clicks').insert({
+      referral_program_id: program.id,
+      referral_code: program.referral_code,
+    });
+    if (insertError) throw insertError;
+    return c.json({ success: true, valid: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/api/referrals/me', async (c) => {
   try {
     const auth = await memberAccessContext(c);
     if (auth.response) return auth.response;
-    const { referred_email } = await c.req.json();
-    const { error } = await supabase.from('referrals').insert({
-      referrer: auth.memberKey,
-      referred_email: String(referred_email || '').trim().slice(0, 320) || null,
+    const program = cleanReferralProgram(c.req.query('program'));
+    if (!program) return c.json({ error: 'Choose Reseller or HuurDit.' }, 400);
+    const dashboard = await referralDashboardForMember(auth.memberKey, program, program === 'reseller');
+    return c.json(dashboard);
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/referrals/programs/reseller/activate', async (c) => {
+  try {
+    const auth = await memberAccessContext(c);
+    if (auth.response) return auth.response;
+    await ensureReferralProgram(auth.memberKey, 'reseller', { status: 'active' });
+    return c.json(await referralDashboardForMember(auth.memberKey, 'reseller'));
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/referrals/programs/huurdit/checkout', async (c) => {
+  try {
+    const auth = await memberAccessContext(c);
+    if (auth.response) return auth.response;
+    const body = await c.req.json().catch(() => ({}));
+    if (body?.accepted_terms !== true) {
+      return c.json({ error: 'Confirm the RentIt / HuurDit terms before continuing to Paystack.', code: 'HUURDIT_TERMS_REQUIRED' }, 400);
+    }
+    if (!PAYSTACK_CONFIGURED) return c.json({ error: 'Paystack is not configured on the We-Rise server yet.' }, 503);
+
+    const existingDashboard = await referralDashboardForMember(auth.memberKey, 'huurdit');
+    if (existingDashboard.program?.status === 'active') {
+      return c.json({ error: 'Your HuurDit / RentIt access is already active.', code: 'HUURDIT_ALREADY_ACTIVE', dashboard: existingDashboard }, 409);
+    }
+
+    const setting = existingDashboard.settings;
+    const amount = Number(setting.activation_fee_zar || 0);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error('The HuurDit activation price is not configured.');
+
+    const recentCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: recent, error: recentError } = await supabase.from('payment_transactions')
+      .select('checkout_reference, expected_amount_zar, created_at')
+      .eq('member_key', auth.memberKey)
+      .eq('purpose', 'huurdit_activation')
+      .eq('status', 'pending')
+      .gte('created_at', recentCutoff)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (recentError) throw recentError;
+
+    const reference = recent?.checkout_reference || checkoutReference('WR-RENT');
+    if (!recent) {
+      const { error } = await supabase.from('payment_transactions').insert({
+        member_key: auth.memberKey,
+        purpose: 'huurdit_activation',
+        checkout_reference: reference,
+        expected_amount_zar: amount,
+        item_name: 'We-Rise RentIt / HuurDit Activation',
+        status: 'pending',
+        metadata: {
+          program_type: 'huurdit',
+          activation_fee_zar: amount,
+          referral_earning_zar: Number(setting.referral_earning_zar || 0),
+          terms_accepted_at: new Date().toISOString(),
+        },
+      });
+      if (error) throw error;
+    }
+
+    const checkout = await initializePaystackTransaction(PAYSTACK_SECRET_KEY, {
+      email: auth.user.email || auth.profile.email || '',
+      amount: toSubunit(amount),
+      currency: PAYSTACK_CURRENCY,
+      reference,
+      channels: ['card'],
+      callback_url: `${primaryFrontendUrl}/?payment=success&kind=rentit`,
+      metadata: JSON.stringify({
+        provider: 'paystack',
+        purpose: 'huurdit_activation',
+        member_key: auth.memberKey,
+        item_name: 'We-Rise RentIt / HuurDit Activation',
+      }),
     });
-    if (error) throw error;
-    return c.json({ success: true }, 201);
+
+    return c.json({
+      authorization_url: checkout?.authorization_url,
+      access_code: checkout?.access_code,
+      reference: checkout?.reference || reference,
+      amount_zar: amount,
+      mode: PAYSTACK_SECRET_KEY.startsWith('sk_live_') ? 'live' : 'test',
+    });
   } catch (error) {
     return fail(c, error);
   }
@@ -2837,7 +3310,7 @@ app.get('/api/admin/activity', async (c) => {
     for (const row of paymentResult.data || []) {
       const member = paymentMembers.get(row.member_key);
       const amount = Number(row.amount_gross_zar ?? row.expected_amount_zar ?? 0);
-      const kind = row.purpose === 'membership_joining' ? 'joining payment' : row.purpose === 'membership_recurring' ? 'monthly membership' : 'BackMi gift';
+      const kind = row.purpose === 'membership_joining' ? 'joining payment' : row.purpose === 'membership_recurring' ? 'monthly membership' : row.purpose === 'huurdit_activation' ? 'HuurDit activation' : 'BackMi gift';
       items.push({ id: row.id, type: 'payment', at: row.verified_at || row.created_at, title: `${member?.display_name || 'Member'} · ${row.status} ${kind}`, detail: `R${amount.toFixed(2)}${member?.email ? ` · ${member.email}` : ''}` });
     }
     for (const row of waitlistResult.data || []) {
@@ -2982,6 +3455,23 @@ app.get('/api/admin/members/:memberKey', async (c) => {
       const { data, error: authError } = await supabase.auth.admin.getUserById(profile.auth_user_id);
       if (!authError && data?.user) authUser = data.user;
     }
+
+    let referrer = null;
+    if (profile.referred_by_member_key) {
+      const { data, error: referrerError } = await supabase.from('member_profiles')
+        .select('member_key, display_name, email')
+        .eq('member_key', profile.referred_by_member_key)
+        .maybeSingle();
+      if (referrerError) throw referrerError;
+      referrer = data || null;
+    }
+    const [{ data: referralPrograms, error: referralProgramError }, { data: referralEarnings, error: referralEarningError }] = await Promise.all([
+      supabase.from('referral_programs').select('id, program_type, referral_code, status, activated_at, created_at').eq('member_key', memberKey).order('created_at', { ascending: false }),
+      supabase.from('referral_conversions').select('id, program_type, conversion_type, earning_amount_zar, status, qualified_at, paid_at, payout_reference, created_at').eq('referrer_member_key', memberKey).order('created_at', { ascending: false }).limit(50),
+    ]);
+    if (referralProgramError) throw referralProgramError;
+    if (referralEarningError) throw referralEarningError;
+
     return c.json({
       profile: {
         member_key: profile.member_key,
@@ -2997,6 +3487,10 @@ app.get('/api/admin/members/:memberKey', async (c) => {
         paystack_customer_code: profile.paystack_customer_code || null,
         subscription_code: profile.payfast_subscription_token || null,
         subscription_status: profile.payfast_subscription_status || null,
+        referred_by_member_key: profile.referred_by_member_key || null,
+        referral_code_used: profile.referral_code_used || null,
+        referral_program_used: profile.referral_program_used || null,
+        referred_at: profile.referred_at || null,
         created_at: profile.created_at,
         updated_at: profile.updated_at,
         last_seen_at: profile.last_seen_at,
@@ -3009,6 +3503,14 @@ app.get('/api/admin/members/:memberKey', async (c) => {
         created_at: authUser.created_at || null,
       } : {},
       payments: payments || [],
+      referral: {
+        attributed_by: referrer,
+        code_used: profile.referral_code_used || null,
+        program_used: profile.referral_program_used || null,
+        referred_at: profile.referred_at || null,
+        programs: (referralPrograms || []).map(row => ({ ...row, share_url: referralShareUrl(row.referral_code) })),
+        earnings: (referralEarnings || []).map(row => ({ ...row, earning_amount_zar: Number(row.earning_amount_zar || 0) })),
+      },
     });
   } catch (error) {
     return fail(c, error);
@@ -3026,7 +3528,7 @@ app.get('/api/admin/payments', async (c) => {
     const from = (page - 1) * pageSize;
     let query = supabase.from('payment_transactions').select('id, member_key, purpose, request_id, checkout_reference, provider_merchant_reference, pf_payment_id, currency, expected_amount_zar, amount_gross_zar, amount_fee_zar, amount_net_zar, item_name, status, created_at, updated_at, verified_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
     if (['pending', 'complete', 'failed', 'cancelled', 'refunded', 'reversed'].includes(status)) query = query.eq('status', status);
-    if (['membership_joining', 'membership_recurring', 'backmi_gift'].includes(purpose)) query = query.eq('purpose', purpose);
+    if (['membership_joining', 'membership_recurring', 'backmi_gift', 'huurdit_activation'].includes(purpose)) query = query.eq('purpose', purpose);
     const { data, error, count } = await query;
     if (error) throw error;
     const memberKeys = [...new Set((data || []).map(row => row.member_key).filter(Boolean))];
@@ -3128,6 +3630,121 @@ app.delete('/api/admin/community/comments/:id', async (c) => {
     if (error) throw error;
     await recordAdminAudit(auth, 'community_comment_removed', 'community_comment', String(id), { topic_id: existing.topic_id, author: existing.author, content_preview: String(existing.content || '').slice(0, 160) });
     return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+
+app.get('/api/admin/referrals', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const requested = Number(c.req.query('limit') || 300);
+    const limit = Math.max(20, Math.min(1000, Number.isFinite(requested) ? Math.floor(requested) : 300));
+
+    const [programResult, conversionResult, clickResult] = await Promise.all([
+      supabase.from('referral_programs')
+        .select('id, member_key, program_type, referral_code, status, activated_at, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      supabase.from('referral_conversions')
+        .select('id, referrer_member_key, referred_member_key, program_type, conversion_type, earning_amount_zar, status, qualified_at, paid_at, payout_reference, created_at')
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      supabase.from('referral_link_clicks').select('id', { count: 'exact', head: true }),
+    ]);
+    if (programResult.error) throw programResult.error;
+    if (conversionResult.error) throw conversionResult.error;
+    if (clickResult.error) throw clickResult.error;
+
+    const programs = programResult.data || [];
+    const conversions = conversionResult.data || [];
+    const memberKeys = [...new Set([
+      ...programs.map(row => row.member_key),
+      ...conversions.map(row => row.referrer_member_key),
+      ...conversions.map(row => row.referred_member_key),
+    ].filter(Boolean))];
+    const members = new Map();
+    if (memberKeys.length) {
+      const { data, error } = await supabase.from('member_profiles')
+        .select('member_key, display_name, email, city_town, province, country')
+        .in('member_key', memberKeys);
+      if (error) throw error;
+      for (const row of data || []) members.set(row.member_key, row);
+    }
+
+    const programRows = programs.map(row => ({
+      ...row,
+      member: members.get(row.member_key) || null,
+      share_url: referralShareUrl(row.referral_code),
+    }));
+    const items = conversions.map(row => ({
+      ...row,
+      earning_amount_zar: Number(row.earning_amount_zar || 0),
+      referrer: members.get(row.referrer_member_key) || null,
+      referred: members.get(row.referred_member_key) || null,
+    }));
+
+    return c.json({
+      metrics: {
+        program_members: programs.filter(row => row.status === 'active').length,
+        reseller_members: programs.filter(row => row.program_type === 'reseller' && row.status === 'active').length,
+        huurdit_members: programs.filter(row => row.program_type === 'huurdit' && row.status === 'active').length,
+        link_clicks: Number(clickResult.count || 0),
+        tracked_conversions: conversions.length,
+        owed_zar: conversions.filter(row => row.status === 'owed').reduce((sum, row) => sum + Number(row.earning_amount_zar || 0), 0),
+        paid_zar: conversions.filter(row => row.status === 'paid').reduce((sum, row) => sum + Number(row.earning_amount_zar || 0), 0),
+      },
+      programs: programRows,
+      items,
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/admin/referral-earnings/:id/paid', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const id = String(c.req.param('id') || '').trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return c.json({ error: 'Invalid referral earning id.' }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    const payoutReference = String(body?.payout_reference || '').trim().slice(0, 160);
+    if (!payoutReference) return c.json({ error: 'Enter an EFT or payout reference before marking this earning paid.' }, 400);
+
+    const { data: existing, error: findError } = await supabase.from('referral_conversions')
+      .select('id, referrer_member_key, referred_member_key, program_type, earning_amount_zar, status')
+      .eq('id', id)
+      .maybeSingle();
+    if (findError) throw findError;
+    if (!existing) return c.json({ error: 'Referral earning not found.' }, 404);
+    if (existing.status === 'paid') return c.json({ success: true, already_paid: true });
+    if (existing.status !== 'owed' || Number(existing.earning_amount_zar || 0) <= 0) {
+      return c.json({ error: 'Only owed referral earnings can be marked paid.' }, 409);
+    }
+
+    const now = new Date().toISOString();
+    const { data: updated, error } = await supabase.from('referral_conversions').update({
+      status: 'paid',
+      paid_at: now,
+      payout_reference: payoutReference,
+      updated_at: now,
+    }).eq('id', id).eq('status', 'owed')
+      .select('id, status, paid_at, payout_reference, earning_amount_zar')
+      .maybeSingle();
+    if (error) throw error;
+    if (!updated) return c.json({ error: 'This earning changed before it could be marked paid. Refresh and try again.' }, 409);
+
+    await recordAdminAudit(auth, 'referral_earning_paid', 'referral_conversion', id, {
+      referrer_member_key: existing.referrer_member_key,
+      referred_member_key: existing.referred_member_key,
+      program_type: existing.program_type,
+      earning_amount_zar: Number(existing.earning_amount_zar || 0),
+      payout_reference: payoutReference,
+    });
+    return c.json({ success: true, item: { ...updated, earning_amount_zar: Number(updated.earning_amount_zar || 0) } });
   } catch (error) {
     return fail(c, error);
   }
