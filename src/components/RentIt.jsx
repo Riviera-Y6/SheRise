@@ -25,6 +25,10 @@ export default function RentIt({ lang, showToast }) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [paying, setPaying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [calcReferrals, setCalcReferrals] = useState(0);
+  const [calcPaymentRate, setCalcPaymentRate] = useState(100);
+  const [calcGrowth, setCalcGrowth] = useState(0);
+  const [calcMonths, setCalcMonths] = useState(12);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -52,6 +56,29 @@ export default function RentIt({ lang, showToast }) {
   const referralEarning = Number(dashboard?.settings?.referral_earning_zar || 1000);
   const remaining = Math.max(0, activationFee - referralEarning);
   const stats = dashboard?.stats || {};
+
+  let projectedReferrals = 0;
+  let projectedPaidReferrals = 0;
+  let finalMonthPaidReferrals = 0;
+  for (let month = 1; month <= calcMonths; month += 1) {
+    const monthReferrals = Math.max(0, Math.round(calcReferrals * Math.pow(1 + (calcGrowth / 100), month - 1)));
+    const monthPaidReferrals = Math.min(monthReferrals, Math.max(0, Math.round(monthReferrals * (calcPaymentRate / 100))));
+    projectedReferrals += monthReferrals;
+    projectedPaidReferrals += monthPaidReferrals;
+    if (month === calcMonths) finalMonthPaidReferrals = monthPaidReferrals;
+  }
+  const projectedGrossEarnings = projectedPaidReferrals * referralEarning;
+  const projectedFinalMonthIncome = finalMonthPaidReferrals * referralEarning;
+  const projectedNetIncome = projectedGrossEarnings - activationFee;
+  const breakEvenReferrals = referralEarning > 0 ? Math.ceil(activationFee / referralEarning) : 0;
+  const remainingToBreakEven = Math.max(0, activationFee - projectedGrossEarnings);
+
+  const resetCalculator = () => {
+    setCalcReferrals(0);
+    setCalcPaymentRate(100);
+    setCalcGrowth(0);
+    setCalcMonths(12);
+  };
 
   const startActivation = async () => {
     if (!termsAccepted) {
@@ -193,6 +220,82 @@ export default function RentIt({ lang, showToast }) {
           <button className="btn btn-primary btn-full rentit-activate-btn" onClick={startActivation} disabled={!termsAccepted || paying}><HiCash /> {paying ? (af ? 'Maak Paystack oop…' : 'Opening Paystack…') : (af ? `Aktiveer HuurDit — ${money(activationFee)}` : `Activate RentIt — ${money(activationFee)}`)}</button>
         </article>
       )}
+
+      <article className="card rentit-calculator-card">
+        <div className="rentit-calculator-heading">
+          <div>
+            <div className="eyebrow">{af ? 'HUURDIT INKOMSTE-SAKREKENAAR' : 'RENTIT INCOME CALCULATOR'}</div>
+            <h3>{af ? 'Bereken jou moontlike verwysingsinkomste' : 'Estimate your potential referral income'}</h3>
+            <p>{af
+              ? `Gebruik jou eie realistiese syfers. Die sakrekenaar gebruik die huidige HuurDit-reël van ${money(referralEarning)} per kwalifiserende betaalde verwysing.`
+              : `Use your own realistic numbers. The calculator uses the current RentIt rule of ${money(referralEarning)} per qualifying paid referral.`}</p>
+          </div>
+          <button className="rentit-calculator-reset" type="button" onClick={resetCalculator}><HiRefresh /> {af ? 'Herstel' : 'Reset'}</button>
+        </div>
+
+        <div className="rentit-calculator-inputs">
+          <label className="rentit-calc-field">
+            <span>{af ? 'Nuwe verwysings per maand' : 'New referrals per month'}</span>
+            <div className="rentit-calc-control">
+              <input type="range" min="0" max="100" step="1" value={calcReferrals} onChange={e => setCalcReferrals(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} />
+              <input type="number" min="0" max="100" step="1" value={calcReferrals} onChange={e => setCalcReferrals(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} />
+            </div>
+            <small>{af ? 'Hoeveel nuwe mense jy realisties elke maand deur jou unieke skakel kan bring.' : 'How many new people you realistically expect to bring through your unique link each month.'}</small>
+          </label>
+
+          <label className="rentit-calc-field">
+            <span>{af ? 'Suksesvolle betaal-koers' : 'Successful payment rate'}</span>
+            <div className="rentit-calc-control">
+              <input type="range" min="0" max="100" step="1" value={calcPaymentRate} onChange={e => setCalcPaymentRate(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} />
+              <div className="rentit-calc-number-wrap"><input type="number" min="0" max="100" step="1" value={calcPaymentRate} onChange={e => setCalcPaymentRate(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /><span>%</span></div>
+            </div>
+            <small>{af ? 'Slegs Paystack-bevestigde kwalifiserende betalings skep ’n verdienste.' : 'Only Paystack-verified qualifying payments create an earning.'}</small>
+          </label>
+
+          <label className="rentit-calc-field">
+            <span>{af ? 'Maandelikse groei in verwysings' : 'Monthly referral growth'}</span>
+            <div className="rentit-calc-control">
+              <input type="range" min="0" max="100" step="1" value={calcGrowth} onChange={e => setCalcGrowth(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} />
+              <div className="rentit-calc-number-wrap"><input type="number" min="0" max="100" step="1" value={calcGrowth} onChange={e => setCalcGrowth(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /><span>%</span></div>
+            </div>
+            <small>{af ? 'Hou dit op 0% vir ’n eenvoudige vaste-maand berekening.' : 'Leave this at 0% for a simple flat monthly estimate.'}</small>
+          </label>
+
+          <label className="rentit-calc-field rentit-calc-months">
+            <span>{af ? 'Projeksie-tydperk' : 'Projection period'}</span>
+            <div className="rentit-calc-month-input"><input type="number" min="1" max="36" step="1" value={calcMonths} onChange={e => setCalcMonths(Math.min(36, Math.max(1, Number(e.target.value) || 1)))} /><span>{af ? 'maande' : 'months'}</span></div>
+          </label>
+        </div>
+
+        <div className="rentit-calculator-results">
+          <div className="rentit-calc-result">
+            <small>{af ? 'Kwalifiserende betaalde verwysings' : 'Qualifying paid referrals'}</small>
+            <strong>{projectedPaidReferrals.toLocaleString('en-ZA')}</strong>
+            <span>{af ? `uit ${projectedReferrals.toLocaleString('en-ZA')} geraamde verwysings` : `from ${projectedReferrals.toLocaleString('en-ZA')} estimated referrals`}</span>
+          </div>
+          <div className="rentit-calc-result">
+            <small>{af ? 'Bruto verwysingsverdienste' : 'Gross referral earnings'}</small>
+            <strong>{money(projectedGrossEarnings)}</strong>
+            <span>{projectedPaidReferrals.toLocaleString('en-ZA')} × {money(referralEarning)}</span>
+          </div>
+          <div className="rentit-calc-result rentit-calc-result-highlight">
+            <small>{af ? 'Geraamde inkomste in finale maand' : 'Estimated final-month income'}</small>
+            <strong>{money(projectedFinalMonthIncome)}</strong>
+            <span>{af ? `${finalMonthPaidReferrals} kwalifiserende betalings in maand ${calcMonths}` : `${finalMonthPaidReferrals} qualifying payments in month ${calcMonths}`}</span>
+          </div>
+          <div className={`rentit-calc-result rentit-calc-result-net ${projectedNetIncome >= 0 ? 'is-positive' : 'is-negative'}`}>
+            <small>{af ? `Netto posisie ná jou eenmalige ${money(activationFee)}-aktivering` : `Net position after your one-time ${money(activationFee)} activation`}</small>
+            <strong>{projectedNetIncome < 0 ? `-${money(Math.abs(projectedNetIncome))}` : money(projectedNetIncome)}</strong>
+            <span>{projectedNetIncome >= 0
+              ? (af ? `Projeksie is bo gelykbreek. Gelykbreek vereis ${breakEvenReferrals} kwalifiserende betaalde verwysings.` : `Projection is above break-even. Break-even requires ${breakEvenReferrals} qualifying paid referrals.`)
+              : (af ? `${money(remainingToBreakEven)} kort van jou aktiveringskoste. Gelykbreek vereis ${breakEvenReferrals} kwalifiserende betaalde verwysings.` : `${money(remainingToBreakEven)} short of your activation cost. Break-even requires ${breakEvenReferrals} qualifying paid referrals.`)}</span>
+          </div>
+        </div>
+
+        <div className="rentit-calculator-note"><HiShieldCheck /><span>{af
+          ? 'Hierdie is slegs ’n inkomste-projeksie, nie ’n waarborg nie. Werklike verdienste word slegs geskep wanneer ’n geldige verwysing deur die We-Rise-stelsel toegeskryf is en Paystack die kwalifiserende betaling bevestig.'
+          : 'This is an income projection, not a guarantee. Actual earnings are created only when a valid referral is attributed by the We-Rise system and Paystack verifies the qualifying payment.'}</span></div>
+      </article>
 
       <article className="card rentit-how-card">
         <div className="eyebrow">{af ? 'HOE HUURDIT WERK' : 'HOW RENTIT WORKS'}</div>

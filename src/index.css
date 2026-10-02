@@ -143,19 +143,19 @@ h1, h2, h3, h4 {
 }
 
 .app-brand-copy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
+  position: relative;
+  display: block;
   min-width: 0;
+  height: 38px;
   line-height: 1;
 }
 
 .app-logo {
+  display: block;
   font-family: 'Playfair Display', serif;
-  font-size: 24px;
+  font-size: 27px;
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 38px;
   background: var(--gradient-pink);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -163,17 +163,19 @@ h1, h2, h3, h4 {
 }
 
 .app-country-label {
-  margin-top: 5px;
-  padding-left: 1px;
+  position: absolute;
+  left: 1px;
+  top: 31px;
+  margin: 0;
   font-family: 'Playfair Display', serif;
-  font-size: 8px;
+  font-size: 10px;
   font-style: italic;
   font-weight: 600;
   line-height: 1;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.055em;
   color: var(--pink-light);
   white-space: nowrap;
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 .app-logo-icon {
@@ -4459,7 +4461,9 @@ textarea.input {
 
 @media (max-width: 400px) {
   .app-header { padding-left: 14px; padding-right: 14px; }
-  .app-logo { font-size: 21px; }
+  .app-brand-copy { height: 34px; }
+  .app-logo { font-size: 24px; line-height: 34px; }
+  .app-country-label { top: 28px; font-size: 9.5px; }
   .app-logo-icon { width: 34px; height: 34px; flex-basis: 34px; }
   .header-member-chip { max-width: 102px; }
   .header-member-name { max-width: 52px; }
@@ -6387,4 +6391,126 @@ textarea.input {
   .admin-free-access-form { grid-template-columns: 1fr; }
   .admin-free-access-row { align-items: flex-start; flex-direction: column; }
   .admin-free-access-actions { width: 100%; justify-content: space-between; }
+}
+
+/* RentIt / HuurDit income calculator */
+.rentit-calculator-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 16px;
+  border: 1px solid rgba(255, 105, 180, .16);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(139, 92, 246, .14), transparent 34%),
+    linear-gradient(145deg, rgba(29, 24, 48, .96), rgba(17, 17, 31, .98));
+}
+.rentit-calculator-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 82, 164, .9), rgba(151, 103, 255, .75), transparent);
+}
+.rentit-calculator-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+.rentit-calculator-heading h3 { margin: 4px 0 5px; font-size: 16px; color: var(--text-primary); }
+.rentit-calculator-heading p { margin: 0; max-width: 520px; color: var(--text-secondary); font-size: 10px; line-height: 1.55; }
+.rentit-calculator-reset {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 105, 180, .17);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .035);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.rentit-calculator-reset:hover { color: var(--text-primary); border-color: rgba(255, 105, 180, .35); }
+.rentit-calculator-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rentit-calc-field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, .065);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .025);
+}
+.rentit-calc-field > span { color: var(--text-primary); font-size: 10.5px; font-weight: 700; }
+.rentit-calc-field > small { color: var(--text-muted); font-size: 8.5px; line-height: 1.45; }
+.rentit-calc-control { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 10px; align-items: center; }
+.rentit-calc-control input[type='range'] { width: 100%; accent-color: var(--pink); cursor: pointer; }
+.rentit-calc-control input[type='number'],
+.rentit-calc-month-input input[type='number'] {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(255, 105, 180, .17);
+  border-radius: 9px;
+  outline: none;
+  padding: 8px 10px;
+  background: rgba(8, 9, 20, .76);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+.rentit-calc-control input[type='number']:focus,
+.rentit-calc-month-input input[type='number']:focus { border-color: rgba(255, 84, 166, .55); box-shadow: 0 0 0 3px rgba(255, 84, 166, .07); }
+.rentit-calc-number-wrap { position: relative; }
+.rentit-calc-number-wrap input { padding-right: 25px !important; }
+.rentit-calc-number-wrap > span { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 9px; pointer-events: none; }
+.rentit-calc-month-input { display: grid; grid-template-columns: 90px auto; gap: 9px; align-items: center; }
+.rentit-calc-month-input > span { color: var(--text-secondary); font-size: 9.5px; }
+.rentit-calculator-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rentit-calc-result {
+  min-height: 96px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 13px;
+  background: rgba(6, 7, 17, .42);
+}
+.rentit-calc-result small { color: var(--text-muted); font-size: 8px; line-height: 1.35; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+.rentit-calc-result strong { color: var(--text-primary); font-size: 20px; line-height: 1; }
+.rentit-calc-result span { color: var(--text-secondary); font-size: 8.5px; line-height: 1.4; }
+.rentit-calc-result-highlight { border-color: rgba(139, 92, 246, .2); background: linear-gradient(145deg, rgba(139, 92, 246, .1), rgba(34, 22, 57, .36)); }
+.rentit-calc-result-highlight strong { color: #c8b6ff; }
+.rentit-calc-result-net { grid-column: 1 / -1; min-height: 116px; border-color: rgba(255, 105, 180, .2); background: linear-gradient(145deg, rgba(255, 60, 154, .085), rgba(91, 52, 155, .095)); }
+.rentit-calc-result-net strong { font-size: 27px; }
+.rentit-calc-result-net.is-positive strong { color: #99e8b9; }
+.rentit-calc-result-net.is-negative strong { color: #ffd09d; }
+.rentit-calculator-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 105, 180, .1);
+  border-radius: 10px;
+  background: rgba(255, 105, 180, .035);
+  color: var(--text-muted);
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+.rentit-calculator-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--pink-light); font-size: 14px; }
+
+@media (max-width: 620px) {
+  .rentit-calculator-heading { align-items: stretch; flex-direction: column; }
+  .rentit-calculator-reset { align-self: flex-start; }
+  .rentit-calculator-inputs,
+  .rentit-calculator-results { grid-template-columns: 1fr; }
+  .rentit-calc-result-net { grid-column: auto; }
+  .rentit-calc-control { grid-template-columns: minmax(0, 1fr) 72px; }
+  .rentit-calc-result { min-height: 88px; }
 }
