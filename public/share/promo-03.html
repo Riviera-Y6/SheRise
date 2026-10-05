@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Discover the We-Rise Digital Wealth Hub</title>
-  <meta name="description" content="Explore We-Rise with 3 days of free access and discover the platform at your own pace." />
+  <title>We-Rise</title>
+  <meta name="description" content="⠀" />
   <meta name="robots" content="noindex,follow" />
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="We-Rise" />
   <meta property="og:locale" content="af_ZA" />
-  <meta property="og:title" content="Discover the We-Rise Digital Wealth Hub" />
-  <meta property="og:description" content="Explore We-Rise with 3 days of free access and discover the platform at your own pace." />
+  <meta property="og:title" content="⠀" />
+  <meta property="og:description" content="⠀" />
   <meta property="og:image" content="https://werise-mu.vercel.app/share-images/we-rise-promo-03.jpeg" />
   <meta property="og:image:secure_url" content="https://werise-mu.vercel.app/share-images/we-rise-promo-03.jpeg" />
   <meta property="og:image:type" content="image/jpeg" />
@@ -18,12 +17,14 @@
   <meta property="og:image:height" content="1102" />
   <meta property="og:image:alt" content="We-Rise promotional image" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Discover the We-Rise Digital Wealth Hub" />
-  <meta name="twitter:description" content="Explore We-Rise with 3 days of free access and discover the platform at your own pace." />
+  <meta name="twitter:title" content="⠀" />
+  <meta name="twitter:description" content="⠀" />
   <meta name="twitter:image" content="https://werise-mu.vercel.app/share-images/we-rise-promo-03.jpeg" />
-  <meta name="theme-color" content="#1a1929" />
+  <meta name="theme-color" content="#0b0712" />
   <style>
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#151426;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:grid;place-items:center;padding:24px}main{max-width:520px;text-align:center}img{width:min(100%,420px);max-height:70vh;object-fit:contain;border-radius:18px;box-shadow:0 18px 60px rgba(255,42,166,.22)}h1{font-size:1.55rem;margin:22px 0 8px}p{color:#c7c2d9;line-height:1.5}a{display:inline-block;margin-top:14px;padding:12px 20px;border-radius:999px;background:linear-gradient(135deg,#ff2aa6,#9b4dff);color:white;text-decoration:none;font-weight:800}
+    html,body{margin:0;min-height:100%;background:#000}
+    body{display:grid;place-items:center}
+    img{display:block;width:100%;height:auto;max-width:1080px}
   </style>
   <script>
     (() => {
@@ -34,19 +35,16 @@
         ? 'https://werise-mu.vercel.app/?ref=' + encodeURIComponent(code)
         : 'https://werise-mu.vercel.app/';
       window.addEventListener('DOMContentLoaded', () => {
-        const link = document.getElementById('open-we-rise');
+        const link = document.getElementById('share-image-link');
         if (link) link.href = destination;
-        window.setTimeout(() => window.location.replace(destination), 120);
+        window.setTimeout(() => window.location.replace(destination), 180);
       });
     })();
   </script>
 </head>
 <body>
-  <main>
+  <a id="share-image-link" href="https://werise-mu.vercel.app/" aria-label="Open We-Rise">
     <img src="/share-images/we-rise-promo-03.jpeg" alt="We-Rise promotional image" />
-    <h1>Discover the We-Rise Digital Wealth Hub</h1>
-    <p>Explore We-Rise with 3 days of free access and discover the platform at your own pace.</p>
-    <a id="open-we-rise" href="https://werise-mu.vercel.app/">Open We-Rise</a>
-  </main>
+  </a>
 </body>
 </html>
