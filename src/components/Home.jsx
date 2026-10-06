@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { HiSparkles, HiHeart, HiChat, HiCurrencyDollar, HiDownload, HiUserAdd } from 'react-icons/hi';
+import { HiSparkles, HiHeart, HiChat, HiCurrencyDollar, HiDownload, HiUserAdd, HiKey, HiLightningBolt, HiX } from 'react-icons/hi';
 import BrandMark from './BrandMark';
 
 export default function Home({ t, lang, onNavigate, userName, campaigns = [], isAuthenticated = false, onLogin, onRegister }) {
   const [affirmationIndex, setAffirmationIndex] = useState(0);
+  const [infoBlock, setInfoBlock] = useState(null);
 
   const affirmations = [
     t.affirmation1, t.affirmation2, t.affirmation3, t.affirmation4,
@@ -23,6 +24,76 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
     { icon: HiHeart, label: t.backMi, tab: 'backmi' },
     { icon: HiChat, label: t.community, tab: 'community' },
     { icon: HiCurrencyDollar, label: t.resell, tab: 'resell' },
+  ];
+
+
+  const opportunityBlocks = [
+    {
+      id: 'resell',
+      icon: HiCurrencyDollar,
+      title: 'Resell-It',
+      eyebrow: lang === 'en' ? 'SELL YOUR WAY' : 'VERKOOP OP JOU MANIER',
+      intro: lang === 'en'
+        ? 'Use your own tracked We-Rise Reseller link and build your own profit above the current baseline price.'
+        : 'Gebruik jou eie naspeurbare We-Rise Reseller-skakel en bou jou eie wins bo die huidige basisprys.',
+      points: lang === 'en'
+        ? [
+            'Receive your own tracked Reseller link.',
+            'First valid referral attribution is stored against the new member.',
+            'You choose your customer price above the current baseline and keep your chosen added profit.',
+          ]
+        : [
+            'Ontvang jou eie naspeurbare Reseller-skakel.',
+            'Die eerste geldige verwysing word teen die nuwe lid gestoor.',
+            'Jy kies jou kliënteprys bo die huidige basisprys en behou jou gekose bykomende wins.',
+          ],
+      cta: lang === 'en' ? 'Open Resell-It' : 'Maak Resell-It oop',
+      tab: 'resell',
+    },
+    {
+      id: 'rentit',
+      icon: HiKey,
+      title: lang === 'en' ? 'Rent-It' : 'HuurDit',
+      eyebrow: lang === 'en' ? 'BUILD RECURRING EARNINGS' : 'BOU HERHALENDE VERDIENSTE',
+      intro: lang === 'en'
+        ? 'Activate RentIt, receive your own referral link and earn on qualifying paid RentIt referrals.'
+        : 'Aktiveer HuurDit, ontvang jou eie verwysingskakel en verdien op kwalifiserende betaalde HuurDit-verwysings.',
+      points: lang === 'en'
+        ? [
+            'R1,800 upfront activates your RentIt right and belongs to We-Rise.',
+            'After activation you receive your own permanent tracked link.',
+            'A qualifying referred R1,800 RentIt activation creates a R1,000 earning owed to you.',
+          ]
+        : [
+            'R1 800 vooruit aktiveer jou HuurDit-reg en behoort aan We-Rise.',
+            'Ná aktivering ontvang jy jou eie permanente naspeurbare skakel.',
+            '’n Kwalifiserende verwysde R1 800 HuurDit-aktivering skep ’n R1 000-verdienste wat aan jou verskuldig is.',
+          ],
+      cta: lang === 'en' ? 'Open Rent-It' : 'Maak HuurDit oop',
+      tab: 'rentit',
+    },
+    {
+      id: 'fuelit',
+      icon: HiLightningBolt,
+      title: 'Fuel-It',
+      eyebrow: lang === 'en' ? 'NEW WE-RISE OPTION' : 'NUWE WE-RISE OPSIE',
+      intro: lang === 'en'
+        ? 'Fuel-It is the third We-Rise opportunity block. Its final commercial rules and functionality are still being prepared.'
+        : 'Fuel-It is die derde We-Rise-geleentheidsblok. Die finale kommersiële reëls en funksionaliteit word nog voorberei.',
+      points: lang === 'en'
+        ? [
+            'Fuel-It will live inside the same We-Rise ecosystem.',
+            'Its final pricing, eligibility and earning rules will be published here once approved.',
+            'No payment or income claim is active for Fuel-It yet.',
+          ]
+        : [
+            'Fuel-It sal binne dieselfde We-Rise-ekosisteem funksioneer.',
+            'Die finale pryse, kwalifikasie en verdienstereëls sal hier verskyn sodra dit goedgekeur is.',
+            'Geen betaling- of inkomsteaanspraak is tans vir Fuel-It aktief nie.',
+          ],
+      cta: null,
+      tab: null,
+    },
   ];
 
   const totalRaised = campaigns.reduce((sum, campaign) => sum + Number(campaign.raised || 0), 0);
@@ -55,6 +126,35 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
           </div>
         </div>
       )}
+
+      <section className="home-opportunity-section" aria-labelledby="home-opportunity-title">
+        <div className="home-opportunity-kicker">{lang === 'en' ? 'DISCOVER YOUR WE-RISE PATH' : 'ONTDEK JOU WE-RISE PAD'}</div>
+        <h3 id="home-opportunity-title">{lang === 'en' ? 'What can We-Rise offer you?' : 'Wat kan We-Rise jou bied?'}</h3>
+        <p>{lang === 'en'
+          ? 'Tap a block to see how each opportunity works.'
+          : 'Tik op ’n blokkie om te sien hoe elke geleentheid werk.'}</p>
+
+        <div className="home-opportunity-grid">
+          {opportunityBlocks.map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`home-opportunity-block home-opportunity-block-${item.id}`}
+                style={{ '--opportunity-delay': `${index * 0.28}s` }}
+                onClick={() => setInfoBlock(item)}
+                aria-label={`${item.title}: ${lang === 'en' ? 'view information' : 'bekyk inligting'}`}
+              >
+                <span className="home-opportunity-glow" aria-hidden="true" />
+                <span className="home-opportunity-icon"><Icon /></span>
+                <strong>{item.title}</strong>
+                <small>{lang === 'en' ? 'Tap for details' : 'Tik vir besonderhede'}</small>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <div className="stats-row">
         <div className="stat-box">
@@ -125,6 +225,59 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
           </div>
         </div>
       </div>
+
+
+      {infoBlock && (
+        <div className="modal-overlay home-opportunity-modal-overlay" onClick={() => setInfoBlock(null)} role="presentation">
+          <div
+            className={`home-opportunity-modal home-opportunity-modal-${infoBlock.id}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="home-opportunity-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="home-opportunity-modal-close"
+              onClick={() => setInfoBlock(null)}
+              aria-label={lang === 'en' ? 'Close' : 'Maak toe'}
+            >
+              <HiX />
+            </button>
+
+            <div className="home-opportunity-modal-icon"><infoBlock.icon /></div>
+            <div className="home-opportunity-modal-kicker">{infoBlock.eyebrow}</div>
+            <h3 id="home-opportunity-modal-title">{infoBlock.title}</h3>
+            <p className="home-opportunity-modal-intro">{infoBlock.intro}</p>
+
+            <div className="home-opportunity-modal-points">
+              {infoBlock.points.map((point, index) => (
+                <div key={point} className="home-opportunity-modal-point">
+                  <span>{index + 1}</span>
+                  <p>{point}</p>
+                </div>
+              ))}
+            </div>
+
+            {infoBlock.tab ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-full home-opportunity-modal-cta"
+                onClick={() => {
+                  setInfoBlock(null);
+                  onNavigate(infoBlock.tab);
+                }}
+              >
+                {infoBlock.cta}
+              </button>
+            ) : (
+              <div className="home-opportunity-coming-soon">
+                {lang === 'en' ? 'Full Fuel-It details coming soon.' : 'Volledige Fuel-It-besonderhede volg binnekort.'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
