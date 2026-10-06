@@ -31,3 +31,12 @@ The visitor is redirected into We-Rise with the referral code preserved.
 - https://werise-mu.vercel.app/share/promo-09.html
 - https://werise-mu.vercel.app/share/promo-10.html
 - https://werise-mu.vercel.app/share/promo-11.html
+
+
+## Easy Facebook sharing workflow
+
+Open `https://werise-mu.vercel.app/share/`, choose a creative, and press **Share on Facebook**. The button opens Facebook's share composer using that creative's share URL, so the URL does not have to be pasted into the post text field. Type/paste the normal daily marketing copy above the attached link preview and publish.
+
+The optional referral-code box in the share library appends `?ref=CODE` before opening Facebook, preserving We-Rise referral attribution. Leave it blank for normal We-Rise marketing.
+
+Facebook controls its own link-card chrome and may still display a small domain/site label under the image. Organic link posts cannot reliably suppress that platform-controlled label.
