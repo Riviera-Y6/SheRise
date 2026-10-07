@@ -6799,3 +6799,75 @@ textarea.input {
 @media (prefers-reduced-motion: reduce) {
   .home-opportunity-block { animation: none; }
 }
+
+/* Fuel-It / Brandstofverligting explainer */
+.home-fuelit-explainer {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.home-fuelit-formula,
+.home-fuelit-example,
+.home-fuelit-disclaimer {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 184, 77, .18);
+  background: rgba(255, 184, 77, .055);
+  padding: 12px 13px;
+}
+
+.home-fuelit-formula {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+
+.home-fuelit-formula > span {
+  color: #ffd28c;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+
+.home-fuelit-formula strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.home-fuelit-formula small {
+  color: #ffd28c;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.home-fuelit-example strong,
+.home-fuelit-disclaimer strong {
+  color: #ffd28c;
+  font-size: 10px;
+}
+
+.home-fuelit-example p,
+.home-fuelit-disclaimer p {
+  margin: 5px 0 8px;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.home-fuelit-example > div {
+  margin-top: 5px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: rgba(255,255,255,.035);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.home-fuelit-disclaimer {
+  border-color: rgba(255, 184, 77, .28);
+  background: rgba(255, 184, 77, .075);
+}
+
+.home-fuelit-disclaimer p { margin-bottom: 0; }

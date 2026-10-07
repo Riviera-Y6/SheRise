@@ -31,7 +31,7 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
     {
       id: 'resell',
       icon: HiCurrencyDollar,
-      title: 'Resell-It',
+      title: lang === 'en' ? 'Resell-It' : 'HerverkoopDit',
       eyebrow: lang === 'en' ? 'SELL YOUR WAY' : 'VERKOOP OP JOU MANIER',
       intro: lang === 'en'
         ? 'Use your own tracked We-Rise Reseller link and build your own profit above the current baseline price.'
@@ -47,7 +47,7 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
             'Die eerste geldige verwysing word teen die nuwe lid gestoor.',
             'Jy kies jou kliënteprys bo die huidige basisprys en behou jou gekose bykomende wins.',
           ],
-      cta: lang === 'en' ? 'Open Resell-It' : 'Maak Resell-It oop',
+      cta: lang === 'en' ? 'Open Resell-It' : 'Maak HerverkoopDit oop',
       tab: 'resell',
     },
     {
@@ -75,22 +75,42 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
     {
       id: 'fuelit',
       icon: HiLightningBolt,
-      title: 'Fuel-It',
-      eyebrow: lang === 'en' ? 'NEW WE-RISE OPTION' : 'NUWE WE-RISE OPSIE',
+      title: lang === 'en' ? 'Fuel-It' : 'Brandstofverligting',
+      eyebrow: lang === 'en' ? 'FUEL RELIEF MODEL' : 'BRANDSTOFVERLIGTINGSMODEL',
       intro: lang === 'en'
-        ? 'Fuel-It is the third We-Rise opportunity block. Its final commercial rules and functionality are still being prepared.'
-        : 'Fuel-It is die derde We-Rise-geleentheidsblok. Die finale kommersiële reëls en funksionaliteit word nog voorberei.',
+        ? 'Fuel-It links the growth an active member creates for We-Rise to a calculated fuel-relief benefit. It is not a fuel discount, fuel card or guaranteed payment.'
+        : 'Brandstofverligting koppel die groei wat ’n aktiewe lid vir We-Rise skep aan ’n berekende brandstofvoordeel. Dit is nie ’n brandstofafslag, brandstofkaart of gewaarborgde uitbetaling nie.',
       points: lang === 'en'
         ? [
-            'Fuel-It will live inside the same We-Rise ecosystem.',
-            'Its final pricing, eligibility and earning rules will be published here once approved.',
-            'No payment or income claim is active for Fuel-It yet.',
+            'The model can use an applicable portion of a new member’s once-off joining subscription, according to the current We-Rise financial model.',
+            'From the R166 monthly membership fee, R33 is allocated to BackMi and R133 remains. An applicable portion of that R133 may be made available for Fuel-It.',
+            'Only new members you refer who become active paying We-Rise members can contribute to your calculated fuel relief.',
+            'The basic calculation is: new active members × the applicable amount per member = available fuel relief.',
+            'Because active members continue paying monthly, Fuel-It may also support an ongoing monthly benefit while sufficient funds remain available.',
+            'No fuel slips or proof of fuel use are required. Fuel is purchased normally and the calculated benefit is made available under the applicable We-Rise rules.',
           ]
         : [
-            'Fuel-It sal binne dieselfde We-Rise-ekosisteem funksioneer.',
-            'Die finale pryse, kwalifikasie en verdienstereëls sal hier verskyn sodra dit goedgekeur is.',
-            'Geen betaling- of inkomsteaanspraak is tans vir Fuel-It aktief nie.',
+            'Die model kan ’n toepaslike gedeelte van ’n nuwe lid se eenmalige aanvangs-subskripsie gebruik volgens die huidige We-Rise-finansiële model.',
+            'Van die R166 maandelikse ledegeld word R33 aan BackMi toegeken en R133 bly oor. ’n Toepaslike gedeelte van daardie R133 kan vir Brandstofverligting beskikbaar gestel word.',
+            'Slegs nuwe lede wat jy verwys en wat aktiewe betalende We-Rise-lede word, kan tot jou berekende brandstofverligting bydra.',
+            'Die basiese berekening is: nuwe aktiewe lede × die toepaslike bedrag per lid = beskikbare brandstofverligting.',
+            'Omdat aktiewe lede maandeliks aanhou betaal, kan Brandstofverligting ook ’n voortgesette maandelikse voordeel ondersteun terwyl voldoende fondse beskikbaar is.',
+            'Geen brandstofkwitansies of bewys van brandstofverbruik word vereis nie. Brandstof word normaal aangekoop en die berekende voordeel word volgens die toepaslike We-Rise-reëls beskikbaar gestel.',
           ],
+      fuelExample: lang === 'en'
+        ? {
+            title: 'Simple example',
+            note: 'If the current model makes R100 per new active member available for Fuel-It:',
+            rows: ['5 new active members × R100 = R500 fuel relief', '10 new active members × R100 = R1,000 fuel relief'],
+          }
+        : {
+            title: 'Eenvoudige voorbeeld',
+            note: 'Indien die huidige model R100 per nuwe aktiewe lid vir Brandstofverligting beskikbaar stel:',
+            rows: ['5 nuwe aktiewe lede × R100 = R500 brandstofverligting', '10 nuwe aktiewe lede × R100 = R1 000 brandstofverligting'],
+          },
+      fuelDisclaimer: lang === 'en'
+        ? 'The amount per member is not fixed in advance. It depends on actual We-Rise income, active membership, the portion allocated to Fuel-It and the financial sustainability of the model.'
+        : 'Die bedrag per lid is nie vooraf vasgestel nie. Dit hang af van werklike We-Rise-inkomste, aktiewe ledetal, die gedeelte wat vir Brandstofverligting beskikbaar gestel word en die finansiële volhoubaarheid van die model.',
       cta: null,
       tab: null,
     },
@@ -259,7 +279,26 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
               ))}
             </div>
 
-            {infoBlock.tab ? (
+            {infoBlock.id === 'fuelit' && infoBlock.fuelExample && (
+              <div className="home-fuelit-explainer">
+                <div className="home-fuelit-formula">
+                  <span>{lang === 'en' ? 'FORMULA' : 'FORMULE'}</span>
+                  <strong>{lang === 'en' ? 'New active members × applicable amount per member' : 'Nuwe aktiewe lede × toepaslike bedrag per lid'}</strong>
+                  <small>{lang === 'en' ? '= available fuel relief' : '= beskikbare brandstofverligting'}</small>
+                </div>
+                <div className="home-fuelit-example">
+                  <strong>{infoBlock.fuelExample.title}</strong>
+                  <p>{infoBlock.fuelExample.note}</p>
+                  {infoBlock.fuelExample.rows.map((row) => <div key={row}>{row}</div>)}
+                </div>
+                <div className="home-fuelit-disclaimer">
+                  <strong>{lang === 'en' ? 'Important' : 'Belangrik'}</strong>
+                  <p>{infoBlock.fuelDisclaimer}</p>
+                </div>
+              </div>
+            )}
+
+            {infoBlock.tab && (
               <button
                 type="button"
                 className="btn btn-primary btn-full home-opportunity-modal-cta"
@@ -270,10 +309,6 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
               >
                 {infoBlock.cta}
               </button>
-            ) : (
-              <div className="home-opportunity-coming-soon">
-                {lang === 'en' ? 'Full Fuel-It details coming soon.' : 'Volledige Fuel-It-besonderhede volg binnekort.'}
-              </div>
             )}
           </div>
         </div>
