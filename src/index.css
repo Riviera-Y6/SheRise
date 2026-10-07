@@ -6874,3 +6874,81 @@ textarea.input {
 
 /* Admin-manageable Share Cards */
 .share-cards-page{min-height:100vh;background:radial-gradient(circle at 50% -10%,rgba(255,62,159,.12),transparent 34%),#151426;color:var(--text-primary,#fff);padding-bottom:60px}.share-cards-header{min-height:68px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:12px clamp(14px,4vw,42px);border-bottom:1px solid rgba(255,105,180,.16);background:rgba(21,20,38,.94);position:sticky;top:0;z-index:20;backdrop-filter:blur(16px)}.share-cards-back{justify-self:start;display:inline-flex;align-items:center;gap:7px;color:#c8c2db;text-decoration:none;font-size:13px;font-weight:700}.share-cards-brand{display:flex;align-items:center;gap:9px;color:#ff6fbe;font-family:Georgia,serif;font-size:19px}.share-cards-brand svg,.share-cards-brand .brand-mark{width:35px;height:35px}.share-cards-header .lang-toggle{justify-self:end}.share-cards-main{width:min(1160px,calc(100% - 28px));margin:0 auto;padding:34px 0}.share-cards-hero{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:22px}.share-cards-hero>div{max-width:720px}.share-cards-hero span{display:block;color:#ff62b5;font-size:10px;font-weight:900;letter-spacing:.16em;margin-bottom:8px}.share-cards-hero h1{font-family:Georgia,serif;font-size:clamp(28px,5vw,46px);line-height:1.04;margin:0 0 10px;color:#fff}.share-cards-hero p{margin:0;color:#aaa3bd;line-height:1.65;font-size:14px}.share-add-photo{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,86,181,.52);background:linear-gradient(135deg,#ff329f,#8f45ff);color:white;border-radius:14px;padding:13px 17px;font-weight:900;box-shadow:0 0 26px rgba(255,50,159,.22);cursor:pointer}.share-referral-box{padding:15px 17px;border:1px solid #3b3156;border-radius:16px;background:#1d1b31;margin-bottom:14px}.share-referral-box label{display:block;font-size:12px;font-weight:900;margin-bottom:7px}.share-referral-box input{width:100%;border:1px solid #51456d;background:#111020;color:#fff;border-radius:11px;padding:11px 13px;font-size:15px;text-transform:uppercase;outline:none}.share-referral-box small{display:block;color:#847c99;font-size:11px;margin-top:6px}.share-admin-note{display:flex;align-items:center;gap:9px;color:#d8cce7;border:1px solid rgba(155,89,255,.26);background:rgba(120,66,190,.09);border-radius:13px;padding:11px 14px;font-size:12px;margin-bottom:18px}.share-admin-note svg{color:#ff5db3;font-size:18px}.share-cards-error{padding:12px 14px;background:rgba(229,57,53,.1);border:1px solid rgba(229,57,53,.35);color:#ffb3b3;border-radius:12px;margin-bottom:14px}.share-cards-loading{padding:18px;color:#aaa3bd}.share-cards-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.share-card-item{overflow:hidden;border:1px solid #3c3354;border-radius:18px;background:#211f37;box-shadow:0 14px 35px rgba(0,0,0,.18)}.share-card-image-wrap{aspect-ratio:1200/630;background:#090811;display:grid;place-items:center;overflow:hidden}.share-card-image-wrap img{width:100%;height:100%;object-fit:contain;display:block}.share-card-body{padding:14px}.share-card-title-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.share-card-title-row strong{display:block;font-size:14px;color:#fff;margin-bottom:3px}.share-card-title-row small{color:#817991;font-size:10px;text-transform:uppercase;letter-spacing:.08em}.share-delete-button{border:1px solid rgba(255,86,86,.28);background:rgba(255,70,70,.08);color:#ff8c8c;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;cursor:pointer}.share-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.share-card-actions button{border:0;border-radius:11px;padding:11px 10px;font-weight:850;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}.share-facebook-button{background:linear-gradient(135deg,#ff2aa6,#7f3cff);color:#fff;box-shadow:0 0 18px rgba(255,42,166,.18)}.share-copy-button{background:#342d4c;color:#fff}.share-upload-overlay{position:fixed;inset:0;z-index:9999;background:rgba(5,4,12,.82);display:grid;place-items:center;padding:18px;backdrop-filter:blur(8px)}.share-upload-modal{width:min(520px,100%);max-height:92vh;overflow:auto;background:#201e34;border:1px solid #4d3d66;border-radius:21px;padding:18px;box-shadow:0 28px 80px rgba(0,0,0,.52)}.share-upload-title{display:flex;align-items:start;justify-content:space-between;gap:14px;margin-bottom:14px}.share-upload-title span{font-size:9px;color:#ff5db3;font-weight:900;letter-spacing:.15em}.share-upload-title h2{font-family:Georgia,serif;margin:3px 0 0;font-size:23px}.share-upload-title>button{border:0;background:#302a44;color:#fff;width:34px;height:34px;border-radius:10px;font-size:24px;line-height:1;cursor:pointer}.share-file-picker{width:100%;min-height:210px;border:1px dashed #735693;border-radius:16px;background:#151326;color:#fff;display:grid;place-items:center;align-content:center;gap:8px;cursor:pointer}.share-file-picker svg{font-size:38px;color:#ff52b1}.share-file-picker strong{font-size:15px}.share-file-picker small{color:#817991}.share-upload-preview{display:block;width:100%;aspect-ratio:1200/630;object-fit:contain;background:#090811;border-radius:14px}.share-change-photo{margin-top:8px;border:0;background:#342d4c;color:#fff;border-radius:9px;padding:9px 12px;cursor:pointer}.share-upload-label{display:grid;gap:7px;margin-top:14px}.share-upload-label span{font-size:12px;font-weight:800}.share-upload-label input{border:1px solid #51456d;background:#111020;color:#fff;border-radius:10px;padding:11px}.share-upload-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:17px}.share-upload-actions .btn{width:auto}.share-upload-actions button:disabled,.share-delete-button:disabled{opacity:.55;cursor:wait}@media(max-width:760px){.share-cards-header{grid-template-columns:auto 1fr auto}.share-cards-brand strong{display:none}.share-cards-main{padding-top:24px}.share-cards-hero{align-items:stretch;flex-direction:column}.share-add-photo{justify-content:center}.share-cards-grid{grid-template-columns:1fr}.share-card-actions{grid-template-columns:1fr}.share-cards-back{font-size:0}.share-cards-back svg{font-size:21px}}
+
+/* =========================================================
+   Mobile full-page scroll fix: Admin + Share Cards
+   The main We-Rise shell intentionally locks html/body scroll
+   and scrolls .main-content. These standalone portals therefore
+   need to own their vertical scrolling explicitly.
+   ========================================================= */
+.admin-shell,
+.share-cards-page,
+.admin-gate {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+/* Use the real dynamic viewport on mobile browsers while keeping
+   the 100% fallback above for older browsers. */
+@supports (height: 100dvh) {
+  .admin-shell,
+  .share-cards-page,
+  .admin-gate {
+    height: 100dvh;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-shell {
+    position: relative;
+  }
+
+  .admin-layout {
+    min-height: 0;
+  }
+
+  /* Keep the horizontal admin menu usable without creating a
+     second vertical scroll area that can trap finger swipes. */
+  .admin-sidebar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+  }
+
+  .admin-main {
+    min-height: 0;
+    padding-bottom: max(72px, calc(48px + env(safe-area-inset-bottom)));
+  }
+
+  .share-cards-page {
+    padding-bottom: max(72px, calc(52px + env(safe-area-inset-bottom)));
+  }
+
+  .share-cards-main {
+    min-height: 0;
+  }
+
+  /* Upload modal must remain independently scrollable on short
+     phone screens, including when the keyboard is open. */
+  .share-upload-overlay {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    align-items: start;
+    padding-top: max(18px, env(safe-area-inset-top));
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+
+  .share-upload-modal {
+    max-height: none;
+    margin: auto 0;
+    overflow: visible;
+  }
+}
