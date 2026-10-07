@@ -125,8 +125,8 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
       fuelDisclaimer: lang === 'en'
         ? 'R33 is the current monthly calculation basis, not a guaranteed cash payout. The actual benefit depends on verified active paid memberships, actual We-Rise income, available funds and the financial sustainability of the model.'
         : 'R33 is die huidige maandelikse berekeningsbasis, nie ’n gewaarborgde kontantuitbetaling nie. Die werklike voordeel hang af van geverifieerde aktiewe betaalde lidmaatskappe, werklike We-Rise-inkomste, beskikbare fondse en die finansiële volhoubaarheid van die model.',
-      cta: null,
-      tab: null,
+      cta: lang === 'en' ? 'Open Fuel-It calculator' : 'Maak Brandstofverligtingsakrekenaar oop',
+      tab: 'fuelit',
     },
   ];
 

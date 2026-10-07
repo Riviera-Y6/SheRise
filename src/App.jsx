@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport, HiKey
+  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport, HiKey, HiLightningBolt
 } from 'react-icons/hi';
 import translations from './i18n/translations';
 import { apiRequest, submitPaystackCheckout } from './lib/api';
@@ -12,6 +12,7 @@ import Community from './components/Community';
 import Messages from './components/Messages';
 import ResellProgram from './components/ResellProgram';
 import RentIt from './components/RentIt';
+import FuelIt from './components/FuelIt';
 import Journal from './components/Journal';
 import Safety from './components/Safety';
 import VisionBoard from './components/VisionBoard';
@@ -46,6 +47,7 @@ const TABS = [
   { id: 'support', icon: HiSupport, labelKey: 'support', public: true },
   { id: 'resell', icon: HiCurrencyDollar, labelKey: 'resell' },
   { id: 'rentit', icon: HiKey, labelKey: 'rentit' },
+  { id: 'fuelit', icon: HiLightningBolt, labelKey: 'fuelit' },
 ];
 
 const PROTECTED_FEATURE_COPY = {
@@ -58,6 +60,7 @@ const PROTECTED_FEATURE_COPY = {
   messages: { en: 'Private Messages', af: 'Privaat Boodskappe' },
   resell: { en: 'We-Rise Resellers', af: 'We-Rise Herverkopers' },
   rentit: { en: 'RentIt', af: 'HuurDit' },
+  fuelit: { en: 'Fuel-It', af: 'Brandstofverligting' },
 };
 
 const normalizeCampaign = (campaign) => ({
@@ -490,6 +493,7 @@ export default function App() {
         {activeTab === 'support' && <Support lang={lang} user={user} profile={profile} />}
         {activeTab === 'resell' && renderPrivateFeature(<ResellProgram t={t} lang={lang} showToast={showToast} />)}
         {activeTab === 'rentit' && renderPrivateFeature(<RentIt lang={lang} showToast={showToast} />)}
+        {activeTab === 'fuelit' && renderPrivateFeature(<FuelIt lang={lang} />)}
 
         {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen && isAuthenticated)) && <Footer t={t} />}
       </main>
