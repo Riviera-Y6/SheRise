@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { HiSparkles, HiHeart, HiChat, HiCurrencyDollar, HiDownload, HiUserAdd, HiKey, HiLightningBolt, HiX } from 'react-icons/hi';
 import BrandMark from './BrandMark';
+import { apiRequest } from '../lib/api';
 
 export default function Home({ t, lang, onNavigate, userName, campaigns = [], isAuthenticated = false, onLogin, onRegister }) {
   const [affirmationIndex, setAffirmationIndex] = useState(0);
   const [infoBlock, setInfoBlock] = useState(null);
+  const [memberCount, setMemberCount] = useState(null);
 
   const affirmations = [
     t.affirmation1, t.affirmation2, t.affirmation3, t.affirmation4,
@@ -18,6 +20,18 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
     }, 10000);
     return () => clearInterval(interval);
   }, [affirmations.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest('/api/public/stats')
+      .then((data) => {
+        if (!cancelled) setMemberCount(Number(data?.member_count ?? 0));
+      })
+      .catch(() => {
+        if (!cancelled) setMemberCount(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const quickActions = [
     { icon: HiSparkles, label: t.aiAssistant, tab: 'ai' },
@@ -82,35 +96,35 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
         : 'Brandstofverligting koppel die groei wat ’n aktiewe lid vir We-Rise skep aan ’n berekende brandstofvoordeel. Dit is nie ’n brandstofafslag, brandstofkaart of gewaarborgde uitbetaling nie.',
       points: lang === 'en'
         ? [
-            'The model can use an applicable portion of a new member’s once-off joining subscription, according to the current We-Rise financial model.',
-            'From the R166 monthly membership fee, R33 is allocated to BackMi and R133 remains. An applicable portion of that R133 may be made available for Fuel-It.',
-            'Only new members you refer who become active paying We-Rise members can contribute to your calculated fuel relief.',
-            'The basic calculation is: new active members × the applicable amount per member = available fuel relief.',
-            'Because active members continue paying monthly, Fuel-It may also support an ongoing monthly benefit while sufficient funds remain available.',
-            'No fuel slips or proof of fuel use are required. Fuel is purchased normally and the calculated benefit is made available under the applicable We-Rise rules.',
+            'The model can also use an applicable portion of a new member’s once-off joining subscription, according to the current We-Rise financial model.',
+            'For the R166 monthly membership fee, the current model uses R10 for BackMi, R33 as the Fuel-It calculation basis, and R123 remains within the We-Rise model.',
+            'Only members you personally refer who become active paying We-Rise members can contribute to your monthly Fuel-It calculation.',
+            'The monthly calculation basis is: qualifying active referred members × R33 = monthly fuel-relief basis.',
+            'Because qualifying members continue paying monthly, their R33 Fuel-It basis can continue monthly while they remain active and sufficient funds are available.',
+            'No fuel slips or proof of fuel use are required. Fuel is purchased normally and any benefit is made available under the applicable We-Rise rules and available funds.',
           ]
         : [
-            'Die model kan ’n toepaslike gedeelte van ’n nuwe lid se eenmalige aanvangs-subskripsie gebruik volgens die huidige We-Rise-finansiële model.',
-            'Van die R166 maandelikse ledegeld word R33 aan BackMi toegeken en R133 bly oor. ’n Toepaslike gedeelte van daardie R133 kan vir Brandstofverligting beskikbaar gestel word.',
-            'Slegs nuwe lede wat jy verwys en wat aktiewe betalende We-Rise-lede word, kan tot jou berekende brandstofverligting bydra.',
-            'Die basiese berekening is: nuwe aktiewe lede × die toepaslike bedrag per lid = beskikbare brandstofverligting.',
-            'Omdat aktiewe lede maandeliks aanhou betaal, kan Brandstofverligting ook ’n voortgesette maandelikse voordeel ondersteun terwyl voldoende fondse beskikbaar is.',
-            'Geen brandstofkwitansies of bewys van brandstofverbruik word vereis nie. Brandstof word normaal aangekoop en die berekende voordeel word volgens die toepaslike We-Rise-reëls beskikbaar gestel.',
+            'Die model kan ook ’n toepaslike gedeelte van ’n nuwe lid se eenmalige aanvangs-subskripsie gebruik volgens die huidige We-Rise-finansiële model.',
+            'Van die R166 maandelikse ledegeld gebruik die huidige model R10 vir BackMi, R33 as die Brandstofverligting-berekeningsbasis, en R123 bly binne die We-Rise-model.',
+            'Slegs lede wat jy persoonlik verwys en wat aktiewe betalende We-Rise-lede word, kan tot jou maandelikse Brandstofverligting-berekening bydra.',
+            'Die maandelikse berekeningsbasis is: kwalifiserende aktiewe verwysde lede × R33 = maandelikse brandstofverligtingsbasis.',
+            'Omdat kwalifiserende lede maandeliks aanhou betaal, kan hul R33 Brandstofverligting-basis maandeliks voortgaan terwyl hulle aktief bly en voldoende fondse beskikbaar is.',
+            'Geen brandstofkwitansies of bewys van brandstofverbruik word vereis nie. Brandstof word normaal aangekoop en enige voordeel word volgens die toepaslike We-Rise-reëls en beskikbare fondse beskikbaar gestel.',
           ],
       fuelExample: lang === 'en'
         ? {
             title: 'Simple example',
-            note: 'If the current model makes R100 per new active member available for Fuel-It:',
-            rows: ['5 new active members × R100 = R500 fuel relief', '10 new active members × R100 = R1,000 fuel relief'],
+            note: 'Using the current R33 monthly Fuel-It calculation basis per qualifying active referred member:',
+            rows: ['5 qualifying active referrals × R33 = R165 monthly fuel-relief basis', '10 qualifying active referrals × R33 = R330 monthly fuel-relief basis'],
           }
         : {
             title: 'Eenvoudige voorbeeld',
-            note: 'Indien die huidige model R100 per nuwe aktiewe lid vir Brandstofverligting beskikbaar stel:',
-            rows: ['5 nuwe aktiewe lede × R100 = R500 brandstofverligting', '10 nuwe aktiewe lede × R100 = R1 000 brandstofverligting'],
+            note: 'Met die huidige R33 maandelikse Brandstofverligting-berekeningsbasis per kwalifiserende aktiewe verwysde lid:',
+            rows: ['5 kwalifiserende aktiewe verwysings × R33 = R165 maandelikse brandstofverligtingsbasis', '10 kwalifiserende aktiewe verwysings × R33 = R330 maandelikse brandstofverligtingsbasis'],
           },
       fuelDisclaimer: lang === 'en'
-        ? 'The amount per member is not fixed in advance. It depends on actual We-Rise income, active membership, the portion allocated to Fuel-It and the financial sustainability of the model.'
-        : 'Die bedrag per lid is nie vooraf vasgestel nie. Dit hang af van werklike We-Rise-inkomste, aktiewe ledetal, die gedeelte wat vir Brandstofverligting beskikbaar gestel word en die finansiële volhoubaarheid van die model.',
+        ? 'R33 is the current monthly calculation basis, not a guaranteed cash payout. The actual benefit depends on verified active paid memberships, actual We-Rise income, available funds and the financial sustainability of the model.'
+        : 'R33 is die huidige maandelikse berekeningsbasis, nie ’n gewaarborgde kontantuitbetaling nie. Die werklike voordeel hang af van geverifieerde aktiewe betaalde lidmaatskappe, werklike We-Rise-inkomste, beskikbare fondse en die finansiële volhoubaarheid van die model.',
       cta: null,
       tab: null,
     },
@@ -178,7 +192,7 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
 
       <div className="stats-row">
         <div className="stat-box">
-          <div className="stat-number">—</div>
+          <div className="stat-number">{memberCount == null ? '—' : memberCount.toLocaleString()}</div>
           <div className="stat-label">{t.statsMembers}</div>
         </div>
         <div className="stat-box">
@@ -283,8 +297,8 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
               <div className="home-fuelit-explainer">
                 <div className="home-fuelit-formula">
                   <span>{lang === 'en' ? 'FORMULA' : 'FORMULE'}</span>
-                  <strong>{lang === 'en' ? 'New active members × applicable amount per member' : 'Nuwe aktiewe lede × toepaslike bedrag per lid'}</strong>
-                  <small>{lang === 'en' ? '= available fuel relief' : '= beskikbare brandstofverligting'}</small>
+                  <strong>{lang === 'en' ? 'Qualifying active referrals × R33' : 'Kwalifiserende aktiewe verwysings × R33'}</strong>
+                  <small>{lang === 'en' ? '= monthly fuel-relief basis' : '= maandelikse brandstofverligtingsbasis'}</small>
                 </div>
                 <div className="home-fuelit-example">
                   <strong>{infoBlock.fuelExample.title}</strong>

@@ -283,6 +283,26 @@ function publicPaymentSettings(settings) {
 }
 
 
+async function applyCurrentBusinessModelDefaults() {
+  // Move only the untouched legacy R33 BackMi setting to Kirsten's current model.
+  // Once changed from the legacy value, future admin edits are never overwritten here.
+  const { data, error } = await supabase.from('payment_settings')
+    .update({
+      backmi_allocation_zar: 10,
+      backmi_allocation_mode: 'fixed',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', 1)
+    .eq('backmi_allocation_zar', 33)
+    .select('id, backmi_allocation_zar');
+  if (error) {
+    console.error('Could not apply current We-Rise monthly allocation model:', error.message);
+    return;
+  }
+  if ((data || []).length) console.log('Updated legacy BackMi monthly allocation from R33 to R10.');
+}
+
+
 function cleanReferralCode(value) {
   const code = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   return code.length >= 6 && code.length <= 32 ? code : '';
@@ -2906,6 +2926,20 @@ app.post('/api/conversations/:id/read', async (c) => {
   }
 });
 
+app.get('/api/public/stats', async (c) => {
+  try {
+    const { count, error } = await supabase.from('member_profiles')
+      .select('member_key', { count: 'exact', head: true })
+      .eq('role', 'member')
+      .not('auth_user_id', 'is', null)
+      .neq('membership_status', 'suspended');
+    if (error) throw error;
+    return c.json({ member_count: Number(count || 0) });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
 app.get('/api/waitlist/count', async (c) => {
   try {
     const { count, error } = await supabase.from('waitlist_entries').select('id', { count: 'exact', head: true });
@@ -4143,6 +4177,7 @@ app.notFound((c) => c.json({ error: 'Route not found.' }, 404));
 app.onError((error, c) => fail(c, error));
 
 const port = Number(process.env.PORT || 8787);
+await applyCurrentBusinessModelDefaults().catch((error) => console.error('Business model bootstrap failed:', error));
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`We-Rise API listening on http://0.0.0.0:${info.port}`);
 });

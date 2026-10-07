@@ -12,7 +12,7 @@ create table if not exists public.payment_settings (
   monthly_fee_usd numeric(12,2) not null default 10 check (monthly_fee_usd >= 0),
   monthly_fee_zar numeric(12,2) not null default 166 check (monthly_fee_zar > 0),
   backmi_allocation_usd numeric(12,2) not null default 2 check (backmi_allocation_usd >= 0),
-  backmi_allocation_zar numeric(12,2) not null default 33 check (backmi_allocation_zar >= 0),
+  backmi_allocation_zar numeric(12,2) not null default 10 check (backmi_allocation_zar >= 0),
   backmi_allocation_mode varchar(20) not null default 'fixed' check (backmi_allocation_mode in ('fixed', 'percentage')),
   backmi_allocation_percentage numeric(6,3) not null default 20 check (backmi_allocation_percentage between 0 and 100),
   allocation_fee_basis varchar(10) not null default 'gross' check (allocation_fee_basis in ('gross', 'net')),
