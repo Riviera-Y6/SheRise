@@ -28,6 +28,7 @@ import BrandMark from './components/BrandMark';
 import ProfilePhoto from './components/ProfilePhoto';
 import Support from './components/Support';
 import AdminDashboard from './components/AdminDashboard';
+import ShareCards from './components/ShareCards';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home', public: true },
@@ -109,7 +110,9 @@ export default function App() {
   const photoRequired = Boolean(isAuthenticated && profile?.photo_required);
   const hasMemberAccess = Boolean(isAuthenticated && membership?.access_allowed && !photoRequired);
   const isAdminUser = profile?.role === 'owner' || profile?.role === 'admin';
-  const adminPortal = window.location.pathname.replace(/\/+$/, '') === '/admin';
+  const normalizedPath = window.location.pathname.replace(/\/+$/, '') || '/';
+  const adminPortal = normalizedPath === '/admin';
+  const sharePortal = normalizedPath === '/share';
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -342,6 +345,13 @@ export default function App() {
   }, [activeTab, lang, membership, t]);
 
   const renderPrivateFeature = (content) => !isAuthenticated ? protectedContent : hasMemberAccess ? content : membershipLockedContent;
+
+  if (sharePortal) {
+    if (!authReady || (isAuthenticated && !profile)) {
+      return <div className="admin-gate"><BrandMark variant="compact" className="app-logo-icon" /><h2>We-Rise Share Cards</h2><p>Loading…</p></div>;
+    }
+    return <ShareCards lang={lang} isAdmin={isAdminUser} onToggleLang={toggleLang} />;
+  }
 
   if (adminPortal) {
     if (!authReady || (isAuthenticated && !profile)) {

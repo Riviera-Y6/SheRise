@@ -34,6 +34,8 @@ const MAX_PROFILE_PHOTO_SIZE = 8 * 1024 * 1024;
 const MAX_SUPPORT_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 const PROFILE_PHOTO_BUCKET = 'we-rise-profile-photos';
 const SUPPORT_ATTACHMENT_BUCKET = 'we-rise-support-attachments';
+const SHARE_CARD_BUCKET = 'we-rise-share-cards';
+const MAX_SHARE_CARD_SIZE = 12 * 1024 * 1024;
 const SUPPORT_CATEGORIES = new Set(['account', 'profile_photo', 'technical', 'membership_payment', 'backmi', 'community_messages', 'safety', 'other']);
 const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, province, city_town, country, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, avatar_path, avatar_updated_at, profile_photo_completed_at, referred_by_member_key, referral_code_used, referral_program_used, referred_at, created_at, updated_at, last_seen_at';
 
@@ -825,6 +827,84 @@ async function recordAdminAudit(auth, action, targetType = null, targetKey = nul
   } catch (error) {
     console.error('Could not write admin audit log:', error?.message || error);
   }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function cleanShareCardSlug(value) {
+  const slug = String(value || '').trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{5,90}$/.test(slug) ? slug : '';
+}
+
+async function ensureShareCardBucket() {
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+  if (listError) throw listError;
+  const existing = (buckets || []).find(bucket => bucket.id === SHARE_CARD_BUCKET || bucket.name === SHARE_CARD_BUCKET);
+  if (!existing) {
+    const { error } = await supabase.storage.createBucket(SHARE_CARD_BUCKET, {
+      public: true,
+      fileSizeLimit: MAX_SHARE_CARD_SIZE,
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    });
+    if (error && !/already|exists|duplicate/i.test(String(error.message || ''))) throw error;
+  } else if (!existing.public) {
+    const { error } = await supabase.storage.updateBucket(SHARE_CARD_BUCKET, {
+      public: true,
+      fileSizeLimit: MAX_SHARE_CARD_SIZE,
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    });
+    if (error) throw error;
+  }
+}
+
+async function getActiveUploadedShareCards(limit = 200) {
+  const requested = Math.max(20, Math.min(500, Number(limit || 200)));
+  const { data, error } = await supabase.from('admin_audit_log')
+    .select('id, action, target_key, metadata, created_at')
+    .eq('target_type', 'share_card')
+    .in('action', ['share_card_added', 'share_card_removed'])
+    .order('created_at', { ascending: false })
+    .limit(requested);
+  if (error) throw error;
+
+  const seen = new Set();
+  const active = [];
+  for (const row of data || []) {
+    const slug = cleanShareCardSlug(row.target_key);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    if (row.action !== 'share_card_added') continue;
+    const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+    const objectPath = String(metadata.object_path || '').trim();
+    if (!objectPath) continue;
+    const publicData = supabase.storage.from(SHARE_CARD_BUCKET).getPublicUrl(objectPath)?.data;
+    const imageUrl = String(publicData?.publicUrl || metadata.image_url || '').trim();
+    if (!imageUrl) continue;
+    active.push({
+      slug,
+      title: String(metadata.title || 'We-Rise Share Card').slice(0, 100),
+      object_path: objectPath,
+      image_url: imageUrl,
+      created_at: row.created_at,
+      share_url: `${primaryFrontendUrl}/share/card/${encodeURIComponent(slug)}`,
+      uploaded: true,
+    });
+  }
+  return active.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+}
+
+async function getUploadedShareCard(slug) {
+  const cleanSlug = cleanShareCardSlug(slug);
+  if (!cleanSlug) return null;
+  const cards = await getActiveUploadedShareCards(500);
+  return cards.find(card => card.slug === cleanSlug) || null;
 }
 
 async function getWebPushClient() {
@@ -3920,6 +4000,127 @@ app.get('/api/admin/resellers', async (c) => {
     return c.json({ items, total: Number(count || 0), total_commission_zar: items.reduce((sum, row) => sum + Number(row.commission || 0), 0) });
   } catch (error) {
     return fail(c, error);
+  }
+});
+
+app.get('/api/share-cards', async (c) => {
+  try {
+    const items = await getActiveUploadedShareCards(500);
+    return c.json({ items });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.post('/api/admin/share-cards', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+
+    const form = await c.req.formData();
+    const image = form.get('image');
+    const title = String(form.get('title') || '').trim().slice(0, 100) || 'We-Rise Share Card';
+    if (!(image instanceof File)) return c.json({ error: 'Choose an image to upload.' }, 400);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(String(image.type || '').toLowerCase())) {
+      return c.json({ error: 'Use a JPG, PNG or WebP image.' }, 400);
+    }
+    if (!image.size || image.size > MAX_SHARE_CARD_SIZE) {
+      return c.json({ error: 'The share-card image must be smaller than 12 MB.' }, 400);
+    }
+
+    await ensureShareCardBucket();
+    const source = Buffer.from(await image.arrayBuffer());
+    const output = await sharp(source)
+      .rotate()
+      .resize(1200, 630, { fit: 'contain', background: { r: 11, g: 7, b: 18, alpha: 1 } })
+      .jpeg({ quality: 91, mozjpeg: true })
+      .toBuffer();
+
+    const slug = `card-${Date.now()}-${randomUUID().slice(0, 8)}`.toLowerCase();
+    const objectPath = `cards/${slug}.jpg`;
+    const { error: uploadError } = await supabase.storage.from(SHARE_CARD_BUCKET).upload(objectPath, output, {
+      contentType: 'image/jpeg',
+      upsert: false,
+      cacheControl: '31536000',
+    });
+    if (uploadError) throw uploadError;
+
+    const publicData = supabase.storage.from(SHARE_CARD_BUCKET).getPublicUrl(objectPath)?.data;
+    const imageUrl = String(publicData?.publicUrl || '').trim();
+    await recordAdminAudit(auth, 'share_card_added', 'share_card', slug, {
+      title,
+      object_path: objectPath,
+      image_url: imageUrl,
+      width: 1200,
+      height: 630,
+      source_name: String(image.name || '').slice(0, 160),
+    });
+
+    return c.json({
+      success: true,
+      item: {
+        slug,
+        title,
+        image_url: imageUrl,
+        share_url: `${primaryFrontendUrl}/share/card/${encodeURIComponent(slug)}`,
+        uploaded: true,
+      },
+    }, 201);
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.delete('/api/admin/share-cards/:slug', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const slug = cleanShareCardSlug(c.req.param('slug'));
+    if (!slug) return c.json({ error: 'Invalid share-card id.' }, 400);
+    const existing = await getUploadedShareCard(slug);
+    if (!existing) return c.json({ error: 'Share card not found.' }, 404);
+
+    const { error: removeError } = await supabase.storage.from(SHARE_CARD_BUCKET).remove([existing.object_path]);
+    if (removeError) console.error('Could not remove share-card object:', removeError.message);
+    await recordAdminAudit(auth, 'share_card_removed', 'share_card', slug, {
+      title: existing.title,
+      object_path: existing.object_path,
+      image_url: existing.image_url,
+    });
+    return c.json({ success: true });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+app.get('/share-card/:slug', async (c) => {
+  try {
+    const slug = cleanShareCardSlug(c.req.param('slug'));
+    const card = slug ? await getUploadedShareCard(slug) : null;
+    if (!card) return c.html('<!doctype html><html><body style="background:#151426;color:white;font-family:sans-serif"><p>Share card not found.</p></body></html>', 404);
+
+    const rawRef = String(c.req.query('ref') || c.req.query('r') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 40);
+    const destination = rawRef
+      ? `${primaryFrontendUrl}/?ref=${encodeURIComponent(rawRef)}`
+      : `${primaryFrontendUrl}/`;
+    const canonical = `${primaryFrontendUrl}/share/card/${encodeURIComponent(slug)}`;
+    const image = escapeHtml(card.image_url);
+    const safeDestination = escapeHtml(destination);
+    const safeCanonical = escapeHtml(canonical);
+    const html = `<!doctype html>
+<html lang="af"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>We-Rise</title><meta name="description" content="⠀"><meta name="robots" content="noindex,follow">
+<meta property="og:type" content="website"><meta property="og:locale" content="af_ZA"><meta property="og:title" content="⠀"><meta property="og:description" content="⠀">
+<meta property="og:url" content="${safeCanonical}"><meta property="og:image" content="${image}"><meta property="og:image:secure_url" content="${image}"><meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="We-Rise promotional image">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="⠀"><meta name="twitter:description" content="⠀"><meta name="twitter:image" content="${image}"><meta name="theme-color" content="#0b0712">
+<style>html,body{margin:0;min-height:100%;background:#000}body{display:grid;place-items:center}a{display:block;width:100%}img{display:block;width:100%;height:auto;max-width:1200px;margin:auto}</style>
+<script>(()=>{const d=${JSON.stringify(destination)};window.addEventListener('DOMContentLoaded',()=>{const a=document.getElementById('share-image-link');if(a)a.href=d;window.setTimeout(()=>window.location.replace(d),350)})})();</script>
+</head><body><a id="share-image-link" href="${safeDestination}" aria-label="Open We-Rise"><img src="${image}" alt="We-Rise promotional image"></a></body></html>`;
+    return c.html(html);
+  } catch (error) {
+    console.error(error);
+    return c.html('<!doctype html><html><body style="background:#151426;color:white;font-family:sans-serif"><p>We-Rise share card is temporarily unavailable.</p></body></html>', 500);
   }
 });
 

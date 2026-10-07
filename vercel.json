@@ -3,6 +3,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/share/card/:slug", "destination": "https://werise-api.onrender.com/share-card/:slug" },
+    { "source": "/share", "destination": "/index.html" },
+    { "source": "/share/", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" }
   ]
 }
