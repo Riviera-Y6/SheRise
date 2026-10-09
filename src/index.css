@@ -7183,3 +7183,98 @@ textarea.input {
   .fuelit-result-primary { grid-column: auto; }
   .fuelit-reset { align-self: flex-start; }
 }
+
+/* Kirsten master model additions */
+.footer-terms-link {
+  margin: 10px auto 2px;
+  border: 0;
+  background: transparent;
+  color: var(--pink-light);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.rentit-monthly-fee-banner,
+.rentit-subscription-status {
+  display: grid;
+  gap: 4px;
+  margin: 13px 0;
+  padding: 13px 14px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 193, 105, .22);
+  background: rgba(255, 193, 105, .055);
+}
+.rentit-monthly-fee-banner span,
+.rentit-subscription-status span { color: var(--text-muted); font-size: 9px; font-weight: 900; letter-spacing: .05em; }
+.rentit-monthly-fee-banner strong,
+.rentit-subscription-status strong { color: #ffd19a; font-size: 20px; }
+.rentit-monthly-fee-banner small,
+.rentit-subscription-status small { color: var(--text-secondary); font-size: 9.5px; line-height: 1.5; }
+.rentit-agreement-btn { margin-top: 10px; }
+
+.fuelit-live-card { padding: 20px; }
+.fuelit-live-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 15px;
+}
+.fuelit-live-heading h3 { margin: 4px 0 0; }
+.fuelit-formula-box span { display: block; margin-top: 5px; color: var(--text-muted); font-size: 10px; line-height: 1.45; }
+
+.agreement-page { display: grid; gap: 16px; width: 100%; }
+.agreement-hero {
+  padding: 24px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 105, 180, .22);
+  background: linear-gradient(135deg, rgba(255,105,180,.10), rgba(116,73,201,.08));
+}
+.agreement-hero-icon {
+  width: 46px; height: 46px; display: grid; place-items: center;
+  margin-bottom: 12px; border-radius: 14px; color: var(--pink-light);
+  background: rgba(255,105,180,.10); border: 1px solid rgba(255,105,180,.22); font-size: 23px;
+}
+.agreement-card {
+  padding: 18px;
+  border-radius: 17px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.028);
+}
+.agreement-card-heading { display: flex; align-items: center; gap: 11px; margin-bottom: 13px; }
+.agreement-card-heading h3 { margin: 0; font-size: 16px; }
+.agreement-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px; color: var(--pink-light); background: rgba(255,105,180,.09); }
+.agreement-list { margin: 0; padding-left: 19px; display: grid; gap: 10px; }
+.agreement-list li { color: var(--text-secondary); line-height: 1.68; font-size: 11px; }
+.agreement-list li::marker { color: var(--pink); }
+.agreement-tier-grid,
+.agreement-goals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.agreement-tier,
+.agreement-goals > div { padding: 15px; border-radius: 14px; border: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.13); }
+.agreement-tier.premium { border-color: rgba(255,193,105,.20); background: rgba(255,193,105,.045); }
+.agreement-tier > span,
+.agreement-goals span { display: block; color: var(--text-muted); font-size: 9px; font-weight: 900; letter-spacing: .06em; }
+.agreement-tier > strong,
+.agreement-goals strong { display: block; margin-top: 8px; color: var(--pink-light); font-size: 24px; }
+.agreement-tier > small,
+.agreement-goals small { display: block; margin: 2px 0 9px; color: var(--text-muted); font-size: 9px; }
+.agreement-tier p { margin: 8px 0 0; color: var(--text-secondary); font-size: 10.5px; line-height: 1.6; }
+.agreement-flow { margin-bottom: 13px; padding: 12px; text-align: center; border-radius: 12px; color: #ffd19a; border: 1px solid rgba(255,193,105,.18); background: rgba(255,193,105,.04); font-weight: 900; }
+.agreement-flow b { margin: 0 5px; color: var(--pink-light); }
+
+.admin-subaccount-field { grid-column: 1 / -1; }
+.admin-subaccount-field input { margin: 6px 0; width: 100%; }
+.admin-subaccount-field button { width: fit-content; }
+
+@media (max-width: 620px) {
+  .fuelit-live-card { padding: 16px; }
+  .fuelit-live-heading { flex-direction: column; }
+  .agreement-hero { padding: 20px 16px; }
+  .agreement-card { padding: 15px; }
+  .agreement-tier-grid,
+  .agreement-goals { grid-template-columns: 1fr; }
+}

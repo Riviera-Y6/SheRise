@@ -17,7 +17,7 @@ import { apiRequest, submitPaystackCheckout } from '../lib/api';
 
 const money = (value) => `R${Number(value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export default function RentIt({ lang, showToast }) {
+export default function RentIt({ lang, showToast, onOpenAgreement }) {
   const af = lang === 'af';
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +54,7 @@ export default function RentIt({ lang, showToast }) {
   const referralLink = dashboard?.program?.share_url || '';
   const activationFee = Number(dashboard?.settings?.activation_fee_zar || 1800);
   const referralEarning = Number(dashboard?.settings?.referral_earning_zar || 1000);
+  const monthlyInfrastructureFee = Number(dashboard?.settings?.monthly_fee_zar || 800);
   const remaining = Math.max(0, activationFee - referralEarning);
   const stats = dashboard?.stats || {};
 
@@ -69,9 +70,11 @@ export default function RentIt({ lang, showToast }) {
   }
   const projectedGrossEarnings = projectedPaidReferrals * referralEarning;
   const projectedFinalMonthIncome = finalMonthPaidReferrals * referralEarning;
-  const projectedNetIncome = projectedGrossEarnings - activationFee;
-  const breakEvenReferrals = referralEarning > 0 ? Math.ceil(activationFee / referralEarning) : 0;
-  const remainingToBreakEven = Math.max(0, activationFee - projectedGrossEarnings);
+  const projectedInfrastructureFees = monthlyInfrastructureFee * calcMonths;
+  const projectedTotalFixedCost = activationFee + projectedInfrastructureFees;
+  const projectedNetIncome = projectedGrossEarnings - projectedTotalFixedCost;
+  const breakEvenReferrals = referralEarning > 0 ? Math.ceil(projectedTotalFixedCost / referralEarning) : 0;
+  const remainingToBreakEven = Math.max(0, projectedTotalFixedCost - projectedGrossEarnings);
 
   const resetCalculator = () => {
     setCalcReferrals(0);
@@ -130,14 +133,14 @@ export default function RentIt({ lang, showToast }) {
 
   const steps = af
     ? [
-        { icon: HiKey, title: 'Aktiveer HuurDit', text: `Jou eerste ${money(activationFee)}-betaling aktiveer jou HuurDit-reg en behoort 100% aan We-Rise. Dit skep nie vir jou ’n ${money(referralEarning)}-verdienste op jou eie betaling nie.` },
+        { icon: HiKey, title: 'Aktiveer HuurDit', text: `Jou eerste ${money(activationFee)}-betaling aktiveer jou Premium HuurDit-lisensie. Vanaf die tweede maand geld ’n ${money(monthlyInfrastructureFee)} maandelikse infrastruktuurfooi.` },
         { icon: HiLink, title: 'Kry jou unieke verwysingskakel', text: 'Ná veilige Paystack-bevestiging kry jy jou eie permanente HuurDit-skakel. Die eerste geldige verwysing word aan die nuwe lid vasgemaak en kan nie later omgeruil word nie.' },
-        { icon: HiTrendingUp, title: 'Verdien op jou eie geldige verwysings', text: `Wanneer iemand wat deur jou skakel gekom het haar eie ${money(activationFee)} HuurDit-aktivering suksesvol betaal, word ${money(referralEarning)} as aan jou verskuldig aangeteken.` },
+        { icon: HiTrendingUp, title: 'Verdien op ’n werklike Premium-verkoop', text: `Wanneer iemand deur jou skakel haar eie ${money(activationFee)} Premium HuurDit-lisensie suksesvol koop, skep daardie geverifieerde produkverkoop ’n ${money(referralEarning)} direkte verkoopskommissie. Geen kommissie word vir blote rekrutering betaal nie.` },
       ]
     : [
-        { icon: HiKey, title: 'Activate RentIt', text: `Your first ${money(activationFee)} payment activates your RentIt right and belongs 100% to We-Rise. You do not earn ${money(referralEarning)} from your own activation payment.` },
+        { icon: HiKey, title: 'Activate RentIt', text: `Your first ${money(activationFee)} payment activates your Premium RentIt licence. From the second month, a ${money(monthlyInfrastructureFee)} monthly infrastructure fee applies.` },
         { icon: HiLink, title: 'Receive your unique referral link', text: 'After secure Paystack confirmation you receive a permanent RentIt link. The first valid referral is attached to the new member and cannot later be swapped.' },
-        { icon: HiTrendingUp, title: 'Earn on your own qualifying referrals', text: `When somebody who came through your link successfully pays her own ${money(activationFee)} RentIt activation, ${money(referralEarning)} is recorded as owed to you.` },
+        { icon: HiTrendingUp, title: 'Earn on a real Premium sale', text: `When somebody through your link successfully buys her own ${money(activationFee)} Premium RentIt licence, that verified product sale creates a ${money(referralEarning)} direct sales commission. No commission is paid for recruitment alone.` },
       ];
 
   const benefits = af
@@ -161,14 +164,15 @@ export default function RentIt({ lang, showToast }) {
         <div className="eyebrow">{af ? 'WE-RISE HUURDIT' : 'WE-RISE RENTIT'}</div>
         <h2 className="section-title">{af ? 'Bou ’n naspeurbare HuurDit-inkomstestroom' : 'Build a trackable RentIt income stream'}</h2>
         <p className="section-subtitle">{af
-          ? 'Aktiveer HuurDit, kry jou eie unieke skakel en verdien slegs op kwalifiserende HuurDit-lede wat werklik deur jou verwysing gekom het.'
-          : 'Activate RentIt, receive your own unique link and earn only on qualifying RentIt members genuinely attributed to your referral.'}</p>
+          ? 'Aktiveer jou Premium HuurDit-lisensie, betaal die maandelikse infrastruktuurfooi en verdien slegs op werklike kwalifiserende Premium-verkope wat deur jou skakel gekom het.'
+          : 'Activate your Premium RentIt licence, maintain the monthly infrastructure fee and earn only on genuine qualifying Premium sales attributed to your link.'}</p>
       </header>
 
       <article className="rentit-price-card">
         <div className="rentit-price-topline"><span>{af ? 'HUURDIT-AKTIVERING' : 'RENTIT ACTIVATION'}</span><span className="rentit-upfront-badge">{af ? 'Vooruit betaalbaar' : 'Payable upfront'}</span></div>
         <div className="rentit-price">R{activationFee.toFixed(0)}<span>.00</span></div>
-        <p>{af ? 'Jou eie eerste aktiveringsbetaling behoort volledig aan We-Rise.' : 'Your own first activation payment belongs entirely to We-Rise.'}</p>
+        <p>{af ? `Eenmalige aktivering: ${money(activationFee)}. Vanaf die tweede maand: ${money(monthlyInfrastructureFee)} per maand vir infrastruktuur, hosting, sekuriteit, opleiding en stelselwye ondersteuning.` : `Once-off activation: ${money(activationFee)}. From the second month: ${money(monthlyInfrastructureFee)} per month for infrastructure, hosting, security, training and system-wide support.`}</p>
+        <div className="rentit-monthly-fee-banner"><span>{af ? 'MAANDELIKSE INFRASTRUKTUURFOOI' : 'MONTHLY INFRASTRUCTURE FEE'}</span><strong>{money(monthlyInfrastructureFee)}</strong><small>{af ? 'vanaf maand 2 · 5-dae grasie by mislukte betaling' : 'from month 2 · 5-day grace after failed payment'}</small></div>
 
         <div className="rentit-money-flow" aria-label={af ? 'HuurDit verwysingsverdienste' : 'RentIt referral earning'}>
           <div className="rentit-money-box rentit-money-earned"><small>{af ? 'Jou verdienste per kwalifiserende verwysing' : 'Your earning per qualifying referral'}</small><strong>{money(referralEarning)}</strong></div>
@@ -179,8 +183,8 @@ export default function RentIt({ lang, showToast }) {
         </div>
 
         <div className="rentit-clarifier"><HiCheckCircle /><p>{af
-          ? `Belangrik: jy ontvang nie ${money(referralEarning)} uit jou eie eerste ${money(activationFee)} nie. Die ${money(referralEarning)} ontstaan eers wanneer ’n nuwe HuurDit-lid permanent aan jou skakel toegeskryf is én haar kwalifiserende Paystack-betaling suksesvol bevestig is. Die ${money(remaining)}-balans word volgens die geldende We-Rise-ooreenkoms hanteer.`
-          : `Important: you do not receive ${money(referralEarning)} from your own first ${money(activationFee)}. The ${money(referralEarning)} is created only when a new RentIt member is permanently attributed to your link and her qualifying Paystack payment is successfully verified. The ${money(remaining)} balance is handled according to the applicable We-Rise agreement.`}</p></div>
+          ? `Belangrik: jou eie ${money(activationFee)}-aktivering skep nie ’n kommissie vir jou nie. Op ’n kwalifiserende nuwe Premium-verkoop is ${money(referralEarning)} die direkte verkoopskommissie en ${money(remaining)} bly aan We-Rise vir die aktivering/infrastruktuurdeel van daardie transaksie. Jou aparte ${money(monthlyInfrastructureFee)} maandelikse infrastruktuurfooi bly betaalbaar vanaf maand 2.`
+          : `Important: your own ${money(activationFee)} activation does not create a commission for you. On a qualifying new Premium sale, ${money(referralEarning)} is the direct sales commission and ${money(remaining)} remains with We-Rise as the activation/infrastructure portion of that transaction. Your separate ${money(monthlyInfrastructureFee)} monthly infrastructure fee remains payable from month 2.`}</p></div>
       </article>
 
       {loading ? <div className="referral-engine-loading"><span className="admin-spinner" /> {af ? 'Laai HuurDit…' : 'Loading RentIt…'}</div> : error ? (
@@ -188,6 +192,7 @@ export default function RentIt({ lang, showToast }) {
       ) : active ? (
         <article className="card rentit-referral-dashboard">
           <div className="rentit-active-badge"><HiCheckCircle /> {af ? 'HUURDIT AKTIEF' : 'RENTIT ACTIVE'}</div>
+          <div className="rentit-subscription-status"><span>{af ? 'Maandelikse infrastruktuur' : 'Monthly infrastructure'}</span><strong>{money(monthlyInfrastructureFee)}</strong><small>{dashboard?.program?.subscription_status === 'past_due' && dashboard?.program?.grace_ends_at ? (af ? `Betaling kort aandag · grasie tot ${new Date(dashboard.program.grace_ends_at).toLocaleDateString('af-ZA')}` : `Payment needs attention · grace until ${new Date(dashboard.program.grace_ends_at).toLocaleDateString('en-ZA')}`) : (af ? 'Aktief volgens jou HuurDit-status' : 'Active according to your RentIt status')}</small></div>
           <div className="eyebrow">{af ? 'JOU PERSOONLIKE SKAKEL' : 'YOUR PERSONAL LINK'}</div>
           <h3>{af ? 'Deel hierdie skakel om jou verwysings korrek toe te skryf' : 'Share this link so your referrals are attributed correctly'}</h3>
           <div className="referral-box reseller-referral-box"><HiLink /><input value={referralLink} readOnly aria-label={af ? 'Jou HuurDit-skakel' : 'Your RentIt link'} /><button className="btn btn-primary btn-sm" onClick={copyLink}>{copied ? <HiCheck /> : <HiLink />} {copied ? (af ? 'Gekopieer' : 'Copied') : (af ? 'Kopieer' : 'Copy')}</button></div>
@@ -212,11 +217,12 @@ export default function RentIt({ lang, showToast }) {
           <div className="eyebrow">{af ? 'AKTIVEER HUURDIT' : 'ACTIVATE RENTIT'}</div>
           <h3>{af ? `Aktiveer vir ${money(activationFee)}` : `Activate for ${money(activationFee)}`}</h3>
           <p>{af
-            ? 'Ná ’n suksesvolle Paystack-betaling word jou unieke HuurDit-skakel outomaties geskep. Jou eie aktiveringsbetaling skep geen verwysingsverdienste vir jou nie.'
-            : 'After a successful Paystack payment, your unique RentIt link is created automatically. Your own activation payment does not create a referral earning for you.'}</p>
+            ? `Ná die ${money(activationFee)} aktivering word jou unieke HuurDit-skakel geskep en die ${money(monthlyInfrastructureFee)} maandelikse infrastruktuurfooi begin vanaf die tweede maand. Jou eie aktivering skep geen kommissie vir jou nie.`
+            : `After the ${money(activationFee)} activation, your unique RentIt link is created and the ${money(monthlyInfrastructureFee)} monthly infrastructure fee begins from the second month. Your own activation creates no commission for you.`}</p>
           <label className="rentit-terms-check"><input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} /><span>{af
-            ? `Ek verstaan dat my eie ${money(activationFee)}-aktivering 100% aan We-Rise betaal word en dat ${money(referralEarning)} slegs verdien word op ’n kwalifiserende nuwe HuurDit-lid wat deur my unieke skakel toegeskryf en deur Paystack bevestig is.`
-            : `I understand that my own ${money(activationFee)} activation is paid 100% to We-Rise and that ${money(referralEarning)} is earned only on a qualifying new RentIt member attributed through my unique link and verified by Paystack.`}</span></label>
+            ? `Ek aanvaar die We-Rise Diensooreenkoms: ${money(activationFee)} eenmalige aktivering, ${money(monthlyInfrastructureFee)} per maand vanaf maand 2, ’n 5-dae grasietydperk by mislukte betaling, en ${money(referralEarning)} kommissie slegs op ’n geverifieerde kwalifiserende Premium-produkverkoop deur my skakel.`
+            : `I accept the We-Rise Service Agreement: ${money(activationFee)} once-off activation, ${money(monthlyInfrastructureFee)} per month from month 2, a five-day grace period after failed payment, and ${money(referralEarning)} commission only on a verified qualifying Premium product sale through my link.`}</span></label>
+          <button type="button" className="btn btn-secondary btn-full rentit-agreement-btn" onClick={onOpenAgreement}><HiShieldCheck /> {af ? 'Lees die volledige Diensooreenkoms' : 'Read the full Service Agreement'}</button>
           <button className="btn btn-primary btn-full rentit-activate-btn" onClick={startActivation} disabled={!termsAccepted || paying}><HiCash /> {paying ? (af ? 'Maak Paystack oop…' : 'Opening Paystack…') : (af ? `Aktiveer HuurDit — ${money(activationFee)}` : `Activate RentIt — ${money(activationFee)}`)}</button>
         </article>
       )}
@@ -227,8 +233,8 @@ export default function RentIt({ lang, showToast }) {
             <div className="eyebrow">{af ? 'HUURDIT INKOMSTE-SAKREKENAAR' : 'RENTIT INCOME CALCULATOR'}</div>
             <h3>{af ? 'Bereken jou moontlike verwysingsinkomste' : 'Estimate your potential referral income'}</h3>
             <p>{af
-              ? `Gebruik jou eie realistiese syfers. Die sakrekenaar gebruik die huidige HuurDit-reël van ${money(referralEarning)} per kwalifiserende betaalde verwysing.`
-              : `Use your own realistic numbers. The calculator uses the current RentIt rule of ${money(referralEarning)} per qualifying paid referral.`}</p>
+              ? `Gebruik jou eie realistiese syfers. Die model gebruik ${money(referralEarning)} per kwalifiserende Premium-verkoop, minus jou ${money(activationFee)} aktivering en ${money(monthlyInfrastructureFee)} maandelikse infrastruktuurfooi.`
+              : `Use your own realistic numbers. The model uses ${money(referralEarning)} per qualifying Premium sale, less your ${money(activationFee)} activation and ${money(monthlyInfrastructureFee)} monthly infrastructure fee.`}</p>
           </div>
           <button className="rentit-calculator-reset" type="button" onClick={resetCalculator}><HiRefresh /> {af ? 'Herstel' : 'Reset'}</button>
         </div>
@@ -284,11 +290,11 @@ export default function RentIt({ lang, showToast }) {
             <span>{af ? `${finalMonthPaidReferrals} kwalifiserende betalings in maand ${calcMonths}` : `${finalMonthPaidReferrals} qualifying payments in month ${calcMonths}`}</span>
           </div>
           <div className={`rentit-calc-result rentit-calc-result-net ${projectedNetIncome >= 0 ? 'is-positive' : 'is-negative'}`}>
-            <small>{af ? `Netto posisie ná jou eenmalige ${money(activationFee)}-aktivering` : `Net position after your one-time ${money(activationFee)} activation`}</small>
+            <small>{af ? `Netto posisie ná ${money(activationFee)} aktivering + ${money(projectedInfrastructureFees)} infrastruktuurfooie` : `Net position after ${money(activationFee)} activation + ${money(projectedInfrastructureFees)} infrastructure fees`}</small>
             <strong>{projectedNetIncome < 0 ? `-${money(Math.abs(projectedNetIncome))}` : money(projectedNetIncome)}</strong>
             <span>{projectedNetIncome >= 0
-              ? (af ? `Projeksie is bo gelykbreek. Gelykbreek vereis ${breakEvenReferrals} kwalifiserende betaalde verwysings.` : `Projection is above break-even. Break-even requires ${breakEvenReferrals} qualifying paid referrals.`)
-              : (af ? `${money(remainingToBreakEven)} kort van jou aktiveringskoste. Gelykbreek vereis ${breakEvenReferrals} kwalifiserende betaalde verwysings.` : `${money(remainingToBreakEven)} short of your activation cost. Break-even requires ${breakEvenReferrals} qualifying paid referrals.`)}</span>
+              ? (af ? `Projeksie is bo gelykbreek. Gelykbreek vereis ${breakEvenReferrals} kwalifiserende betaalde Premium-verkope.` : `Projection is above break-even. Break-even requires ${breakEvenReferrals} qualifying paid Premium sales.`)
+              : (af ? `${money(remainingToBreakEven)} kort van totale vaste koste vir dié tydperk. Gelykbreek vereis ${breakEvenReferrals} kwalifiserende betaalde Premium-verkope.` : `${money(remainingToBreakEven)} short of total fixed costs for this period. Break-even requires ${breakEvenReferrals} qualifying paid Premium sales.`)}</span>
           </div>
         </div>
 
@@ -314,6 +320,8 @@ export default function RentIt({ lang, showToast }) {
         <ul>
           <li>{af ? 'Die eerste geldige verwysingskakel waarmee ’n nuwe lid registreer, wen. Die toewysing kan nie later gewysig word om iemand anders te bevoordeel nie.' : 'The first valid referral link used when a new member registers wins. Attribution cannot later be changed to benefit somebody else.'}</li>
           <li>{af ? 'Self-verwysings word nie toegelaat nie.' : 'Self-referrals are not allowed.'}</li>
+          <li>{af ? `Die ${money(referralEarning)} is ’n verkoopskommissie op ’n werklike betaalde Premium-lisensie/huurtransaksie; dit is nie ’n werwingsbonus vir die blote toevoeging van ’n persoon nie.` : `The ${money(referralEarning)} is a sales commission on a genuine paid Premium licence/rental transaction; it is not a recruitment reward for simply adding a person.`}</li>
+          <li>{af ? `Die ${money(monthlyInfrastructureFee)} maandelikse infrastruktuurfooi is vanaf maand 2 betaalbaar. By ’n mislukte betaling geld ’n 5-dae grasietydperk; daarna kan die HuurDit-lisensie en verwysingskakel opgeskort word.` : `The ${money(monthlyInfrastructureFee)} monthly infrastructure fee is payable from month 2. A failed payment starts a five-day grace period; after that the RentIt licence and referral link may be suspended.`}</li>
           <li>{af ? `Geen ${money(referralEarning)}-verdienste word geskep bloot deur ’n klik, registrasie of onbetaalde rekening nie. Die kwalifiserende ${money(activationFee)}-betaling moet deur Paystack bevestig word.` : `No ${money(referralEarning)} earning is created from a click, registration or unpaid account alone. The qualifying ${money(activationFee)} payment must be verified by Paystack.`}</li>
           <li>{af ? 'Direkte We-Rise-bemarking en registrasies sonder ’n geldige verwysingskode word aan geen huurder toegeskryf nie.' : 'Direct We-Rise marketing and registrations without a valid referral code are not attributed to any renter.'}</li>
           <li>{af ? 'We-Rise bly die eienaar van die kernplatform, handelsmerk en intellektuele eiendom.' : 'We-Rise remains the owner of the core platform, brand and intellectual property.'}</li>

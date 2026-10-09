@@ -155,6 +155,11 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
           <strong>{money(settings.backmi_allocation_zar)}</strong>
           <small>{lang === 'en' ? 'Included in membership — not an extra fee' : 'Ingesluit by lidmaatskap — nie ’n ekstra fooi nie'}</small>
         </article>
+        <article className="membership-price-card fuelit-allocation-card">
+          <span>{lang === 'en' ? 'Monthly Fuel-It allocation basis' : 'Maandelikse VulDit-toewysingsbasis'}</span>
+          <strong>{money(settings.fuelit_allocation_zar ?? 33)}</strong>
+          <small>{lang === 'en' ? 'Used for qualifying referral credits' : 'Gebruik vir kwalifiserende verwysingskrediete'}</small>
+        </article>
       </div>
 
       {!complimentary && !active && !trialActive && (!current.joining_paid_at || canRestart) && (
@@ -205,7 +210,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
       )}
 
       <div className="billing-principles">
-        <span><HiHeart /> {lang === 'en' ? 'BackMi remains a We-Rise benefit with no separate subscription.' : 'BackMi bly ’n We-Rise-voordeel sonder ’n aparte intekening.'}</span>
+        <span><HiHeart /> {lang === 'en' ? 'R166 monthly model: R10 BackMi + R33 Fuel-It + R123 We-Rise infrastructure.' : 'R166 maandelikse model: R10 BackMi + R33 VulDit + R123 We-Rise infrastruktuur.'}</span>
         <span><HiShieldCheck /> {lang === 'en' ? 'Only Paystack-confirmed payments are recorded as successful.' : 'Slegs betalings wat Paystack bevestig, word as suksesvol aangeteken.'}</span>
       </div>
 
@@ -259,6 +264,7 @@ export default function Billing({ lang, membership, profile, showToast, onRefres
               ['monthly_fee_zar', lang === 'en' ? 'Monthly fee (R)' : 'Maandelikse fooi (R)'],
               ['monthly_fee_usd', lang === 'en' ? 'Monthly reference ($)' : 'Maandelikse verwysing ($)'],
               ['backmi_allocation_zar', lang === 'en' ? 'BackMi allocation (R)' : 'BackMi-toewysing (R)'],
+              ['fuelit_allocation_zar', lang === 'en' ? 'Fuel-It allocation (R)' : 'VulDit-toewysing (R)'],
               ['backmi_allocation_usd', lang === 'en' ? 'BackMi reference ($)' : 'BackMi-verwysing ($)'],
               ['first_recurring_delay_days', lang === 'en' ? 'First recurring delay (days)' : 'Eerste herhaling ná (dae)'],
               ['subscription_grace_days', lang === 'en' ? 'Failed-payment grace (days)' : 'Betaalmislukking-grasie (dae)'],

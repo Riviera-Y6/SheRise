@@ -74,14 +74,14 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
         : 'Aktiveer HuurDit, ontvang jou eie verwysingskakel en verdien op kwalifiserende betaalde HuurDit-verwysings.',
       points: lang === 'en'
         ? [
-            'R1,800 upfront activates your RentIt right and belongs to We-Rise.',
-            'After activation you receive your own permanent tracked link.',
-            'A qualifying referred R1,800 RentIt activation creates a R1,000 earning owed to you.',
+            'R1,800 once-off activates your Premium RentIt licence. A separate R800 monthly infrastructure fee applies from month 2.',
+            'After activation you receive your own permanent tracked link. Failed monthly infrastructure payments receive a 5-day grace period before suspension.',
+            'A genuine qualifying R1,800 Premium licence sale through your link creates a R1,000 direct sales commission; the remaining R800 is allocated to We-Rise. No commission is paid for recruitment alone.',
           ]
         : [
-            'R1 800 vooruit aktiveer jou HuurDit-reg en behoort aan We-Rise.',
-            'Ná aktivering ontvang jy jou eie permanente naspeurbare skakel.',
-            '’n Kwalifiserende verwysde R1 800 HuurDit-aktivering skep ’n R1 000-verdienste wat aan jou verskuldig is.',
+            'R1 800 eenmalig aktiveer jou Premium HuurDit-lisensie. ’n Afsonderlike R800 maandelikse infrastruktuurfooi geld vanaf maand 2.',
+            'Ná aktivering ontvang jy jou eie permanente naspeurbare skakel. Mislukte maandelikse infrastruktuurbetalings kry ’n 5-dae grasietydperk voor opskorting.',
+            '’n Werklike kwalifiserende R1 800 Premium-lisensieverkoop deur jou skakel skep ’n R1 000 direkte verkoopskommissie; die oorblywende R800 word aan We-Rise toegeken. Geen kommissie word vir blote rekrutering betaal nie.',
           ],
       cta: lang === 'en' ? 'Open Rent-It' : 'Maak HuurDit oop',
       tab: 'rentit',
@@ -89,8 +89,8 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
     {
       id: 'fuelit',
       icon: HiLightningBolt,
-      title: lang === 'en' ? 'Fuel-It' : 'Brandstofverligting',
-      eyebrow: lang === 'en' ? 'FUEL RELIEF MODEL' : 'BRANDSTOFVERLIGTINGSMODEL',
+      title: lang === 'en' ? 'Fuel-It' : 'VulDit',
+      eyebrow: lang === 'en' ? 'FUEL RELIEF MODEL' : 'BRANDSTOFBESPARINGSMODEL',
       intro: lang === 'en'
         ? 'Fuel-It links the growth an active member creates for We-Rise to a calculated fuel-relief benefit. It is not a fuel discount, fuel card or guaranteed payment.'
         : 'Brandstofverligting koppel die groei wat ’n aktiewe lid vir We-Rise skep aan ’n berekende brandstofvoordeel. Dit is nie ’n brandstofafslag, brandstofkaart of gewaarborgde uitbetaling nie.',
@@ -99,7 +99,7 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
             'The model can also use an applicable portion of a new member’s once-off joining subscription, according to the current We-Rise financial model.',
             'For the R166 monthly membership fee, the current model uses R10 for BackMi, R33 as the Fuel-It calculation basis, and R123 remains within the We-Rise model.',
             'Only members you personally refer who become active paying We-Rise members can contribute to your monthly Fuel-It calculation.',
-            'The monthly calculation basis is: qualifying active referred members × R33 = monthly fuel-relief basis.',
+            'The monthly calculation is: qualifying active referred members × R33 = gross Fuel-It credit. That credit first covers your own R166 platform fee; only the excess remains as additional Fuel-It credit.',
             'Because qualifying members continue paying monthly, their R33 Fuel-It basis can continue monthly while they remain active and sufficient funds are available.',
             'No fuel slips or proof of fuel use are required. Fuel is purchased normally and any benefit is made available under the applicable We-Rise rules and available funds.',
           ]
@@ -107,7 +107,7 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
             'Die model kan ook ’n toepaslike gedeelte van ’n nuwe lid se eenmalige aanvangs-subskripsie gebruik volgens die huidige We-Rise-finansiële model.',
             'Van die R166 maandelikse ledegeld gebruik die huidige model R10 vir BackMi, R33 as die Brandstofverligting-berekeningsbasis, en R123 bly binne die We-Rise-model.',
             'Slegs lede wat jy persoonlik verwys en wat aktiewe betalende We-Rise-lede word, kan tot jou maandelikse Brandstofverligting-berekening bydra.',
-            'Die maandelikse berekeningsbasis is: kwalifiserende aktiewe verwysde lede × R33 = maandelikse brandstofverligtingsbasis.',
+            'Die maandelikse berekening is: kwalifiserende aktiewe verwysde lede × R33 = bruto VulDit-krediet. Die krediet dek eers jou eie R166 platformfooi; slegs die oorskot bly as verdere Brandstofbesparing-krediet.',
             'Omdat kwalifiserende lede maandeliks aanhou betaal, kan hul R33 Brandstofverligting-basis maandeliks voortgaan terwyl hulle aktief bly en voldoende fondse beskikbaar is.',
             'Geen brandstofkwitansies of bewys van brandstofverbruik word vereis nie. Brandstof word normaal aangekoop en enige voordeel word volgens die toepaslike We-Rise-reëls en beskikbare fondse beskikbaar gestel.',
           ],
@@ -115,17 +115,17 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
         ? {
             title: 'Simple example',
             note: 'Using the current R33 monthly Fuel-It calculation basis per qualifying active referred member:',
-            rows: ['5 qualifying active referrals × R33 = R165 monthly fuel-relief basis', '10 qualifying active referrals × R33 = R330 monthly fuel-relief basis'],
+            rows: ['5 qualifying active referrals × R33 = R165 credit → R1 platform fee remains', '6 qualifying active referrals × R33 = R198 credit → R166 fee covered + R32 excess'],
           }
         : {
             title: 'Eenvoudige voorbeeld',
             note: 'Met die huidige R33 maandelikse Brandstofverligting-berekeningsbasis per kwalifiserende aktiewe verwysde lid:',
-            rows: ['5 kwalifiserende aktiewe verwysings × R33 = R165 maandelikse brandstofverligtingsbasis', '10 kwalifiserende aktiewe verwysings × R33 = R330 maandelikse brandstofverligtingsbasis'],
+            rows: ['5 kwalifiserende aktiewe verwysings × R33 = R165 krediet → R1 platformfooi bly oor', '6 kwalifiserende aktiewe verwysings × R33 = R198 krediet → R166 fooi gedek + R32 oorskot'],
           },
       fuelDisclaimer: lang === 'en'
         ? 'R33 is the current monthly calculation basis, not a guaranteed cash payout. The actual benefit depends on verified active paid memberships, actual We-Rise income, available funds and the financial sustainability of the model.'
         : 'R33 is die huidige maandelikse berekeningsbasis, nie ’n gewaarborgde kontantuitbetaling nie. Die werklike voordeel hang af van geverifieerde aktiewe betaalde lidmaatskappe, werklike We-Rise-inkomste, beskikbare fondse en die finansiële volhoubaarheid van die model.',
-      cta: lang === 'en' ? 'Open Fuel-It calculator' : 'Maak Brandstofverligtingsakrekenaar oop',
+      cta: lang === 'en' ? 'Open Fuel-It calculator' : 'Maak VulDit-sakrekenaar oop',
       tab: 'fuelit',
     },
   ];
@@ -298,7 +298,7 @@ export default function Home({ t, lang, onNavigate, userName, campaigns = [], is
                 <div className="home-fuelit-formula">
                   <span>{lang === 'en' ? 'FORMULA' : 'FORMULE'}</span>
                   <strong>{lang === 'en' ? 'Qualifying active referrals × R33' : 'Kwalifiserende aktiewe verwysings × R33'}</strong>
-                  <small>{lang === 'en' ? '= monthly fuel-relief basis' : '= maandelikse brandstofverligtingsbasis'}</small>
+                  <small>{lang === 'en' ? '= gross credit → covers your R166 fee first' : '= bruto krediet → dek eers jou R166 fooi'}</small>
                 </div>
                 <div className="home-fuelit-example">
                   <strong>{infoBlock.fuelExample.title}</strong>

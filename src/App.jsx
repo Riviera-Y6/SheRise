@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport, HiKey, HiLightningBolt
+  HiHome, HiSparkles, HiHeart, HiUsers, HiCurrencyDollar, HiPencil, HiShieldCheck, HiStar, HiEmojiHappy, HiChatAlt2, HiUserAdd, HiLockClosed, HiLogout, HiTrendingUp, HiCreditCard, HiSupport, HiKey, HiLightningBolt, HiDocumentText
 } from 'react-icons/hi';
 import translations from './i18n/translations';
 import { apiRequest, submitPaystackCheckout } from './lib/api';
@@ -30,6 +30,7 @@ import ProfilePhoto from './components/ProfilePhoto';
 import Support from './components/Support';
 import AdminDashboard from './components/AdminDashboard';
 import ShareCards from './components/ShareCards';
+import ServiceAgreement from './components/ServiceAgreement';
 
 const TABS = [
   { id: 'home', icon: HiHome, labelKey: 'home', public: true },
@@ -45,6 +46,7 @@ const TABS = [
   { id: 'messages', icon: HiChatAlt2, labelKey: 'messages' },
   { id: 'waitlist', icon: HiUserAdd, labelKey: 'waitlist', public: true },
   { id: 'support', icon: HiSupport, labelKey: 'support', public: true },
+  { id: 'terms', icon: HiDocumentText, labelKey: 'terms', public: true },
   { id: 'resell', icon: HiCurrencyDollar, labelKey: 'resell' },
   { id: 'rentit', icon: HiKey, labelKey: 'rentit' },
   { id: 'fuelit', icon: HiLightningBolt, labelKey: 'fuelit' },
@@ -60,7 +62,7 @@ const PROTECTED_FEATURE_COPY = {
   messages: { en: 'Private Messages', af: 'Privaat Boodskappe' },
   resell: { en: 'We-Rise Resellers', af: 'We-Rise Herverkopers' },
   rentit: { en: 'RentIt', af: 'HuurDit' },
-  fuelit: { en: 'Fuel-It', af: 'Brandstofverligting' },
+  fuelit: { en: 'Fuel-It', af: 'VulDit · Brandstofbesparing' },
 };
 
 const normalizeCampaign = (campaign) => ({
@@ -491,11 +493,12 @@ export default function App() {
         {activeTab === 'journal' && renderPrivateFeature(<Journal t={t} lang={lang} showToast={showToast} />)}
         {activeTab === 'waitlist' && <Waitlist lang={lang} userName={userName} showToast={showToast} />}
         {activeTab === 'support' && <Support lang={lang} user={user} profile={profile} />}
+        {activeTab === 'terms' && <ServiceAgreement lang={lang} />}
         {activeTab === 'resell' && renderPrivateFeature(<ResellProgram t={t} lang={lang} showToast={showToast} />)}
-        {activeTab === 'rentit' && renderPrivateFeature(<RentIt lang={lang} showToast={showToast} />)}
+        {activeTab === 'rentit' && renderPrivateFeature(<RentIt lang={lang} showToast={showToast} onOpenAgreement={() => setActiveTab('terms')} />)}
         {activeTab === 'fuelit' && renderPrivateFeature(<FuelIt lang={lang} />)}
 
-        {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen && isAuthenticated)) && <Footer t={t} />}
+        {!((activeTab === 'community' && communityConversationOpen) || (activeTab === 'messages' && messageConversationOpen && isAuthenticated)) && <Footer t={t} onOpenTerms={() => setActiveTab('terms')} />}
       </main>
 
       <Manifesto />

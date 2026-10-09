@@ -37,7 +37,7 @@ const SUPPORT_ATTACHMENT_BUCKET = 'we-rise-support-attachments';
 const SHARE_CARD_BUCKET = 'we-rise-share-cards';
 const MAX_SHARE_CARD_SIZE = 12 * 1024 * 1024;
 const SUPPORT_CATEGORIES = new Set(['account', 'profile_photo', 'technical', 'membership_payment', 'backmi', 'community_messages', 'safety', 'other']);
-const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, province, city_town, country, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, avatar_path, avatar_updated_at, profile_photo_completed_at, referred_by_member_key, referral_code_used, referral_program_used, referred_at, created_at, updated_at, last_seen_at';
+const PROFILE_COLUMNS = 'member_key, auth_user_id, email, display_name, province, city_town, country, plan, role, membership_status, trial_started_at, trial_ends_at, joining_paid_at, payfast_subscription_token, payfast_subscription_status, subscription_started_at, subscription_next_billing_date, subscription_cancelled_at, subscription_monthly_amount_zar, subscription_grace_ends_at, subscription_status_updated_at, paystack_customer_code, paystack_authorization_code, paystack_email_token, paystack_subaccount_code, avatar_path, avatar_updated_at, profile_photo_completed_at, referred_by_member_key, referral_code_used, referral_program_used, referred_at, created_at, updated_at, last_seen_at';
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -48,6 +48,7 @@ const EMERGENCY_SMS_ENABLED = String(process.env.ENABLE_EMERGENCY_SMS || '').tri
 const SMS_CONFIGURED = Boolean(EMERGENCY_SMS_ENABLED && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
 const PAYSTACK_SECRET_KEY = String(process.env.PAYSTACK_SECRET_KEY || '').trim();
 const PAYSTACK_PLAN_CODE = String(process.env.PAYSTACK_PLAN_CODE || '').trim();
+const PAYSTACK_RENTIT_PLAN_CODE = String(process.env.PAYSTACK_RENTIT_PLAN_CODE || '').trim();
 const PAYSTACK_CURRENCY = String(process.env.PAYSTACK_CURRENCY || 'ZAR').trim().toUpperCase();
 const PAYSTACK_ENABLED = String(process.env.ENABLE_PAYSTACK || '').trim().toLowerCase() === 'true';
 const BACKMI_PAYMENTS_ENABLED = String(process.env.ENABLE_BACKMI_PAYMENTS || '').trim().toLowerCase() === 'true';
@@ -68,6 +69,7 @@ const VAPID_SUBJECT = String(process.env.VAPID_SUBJECT || `mailto:${SUPPORT_FROM
 const ADMIN_PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && /^(mailto:|https:\/\/)/i.test(VAPID_SUBJECT));
 let webPushClientPromise = null;
 const PAYSTACK_CONFIGURED = Boolean(PAYSTACK_ENABLED && PAYSTACK_SECRET_KEY && PAYSTACK_PLAN_CODE && PAYSTACK_CURRENCY === 'ZAR');
+const PAYSTACK_RENTIT_CONFIGURED = Boolean(PAYSTACK_ENABLED && PAYSTACK_SECRET_KEY && PAYSTACK_RENTIT_PLAN_CODE && PAYSTACK_CURRENCY === 'ZAR');
 const GEMINI_ENABLED = String(process.env.ENABLE_GEMINI_AI || '').trim().toLowerCase() === 'true';
 const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
 const GEMINI_MODEL = String(process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
@@ -265,6 +267,7 @@ function publicPaymentSettings(settings) {
     monthly_fee_zar: Number(settings.monthly_fee_zar),
     backmi_allocation_usd: Number(settings.backmi_allocation_usd),
     backmi_allocation_zar: Number(settings.backmi_allocation_zar),
+    fuelit_allocation_zar: Number(settings.fuelit_allocation_zar || 33),
     backmi_allocation_mode: settings.backmi_allocation_mode,
     backmi_allocation_percentage: Number(settings.backmi_allocation_percentage),
     allocation_fee_basis: settings.allocation_fee_basis,
@@ -288,13 +291,17 @@ async function applyCurrentBusinessModelDefaults() {
   // Once changed from the legacy value, future admin edits are never overwritten here.
   const { data, error } = await supabase.from('payment_settings')
     .update({
+      joining_fee_zar: 194,
+      monthly_fee_zar: 166,
       backmi_allocation_zar: 10,
       backmi_allocation_mode: 'fixed',
+      fuelit_allocation_zar: 33,
+      subscription_grace_days: 5,
       updated_at: new Date().toISOString(),
     })
     .eq('id', 1)
-    .eq('backmi_allocation_zar', 33)
-    .select('id, backmi_allocation_zar');
+    .in('backmi_allocation_zar', [10, 33])
+    .select('id, backmi_allocation_zar, fuelit_allocation_zar');
   if (error) {
     console.error('Could not apply current We-Rise monthly allocation model:', error.message);
     return;
@@ -317,7 +324,7 @@ async function getReferralProgramSetting(programType) {
   const program = cleanReferralProgram(programType);
   if (!program) throw new Error('Invalid We-Rise referral program.');
   const { data, error } = await supabase.from('referral_program_settings')
-    .select('program_type, activation_fee_zar, referral_earning_zar, qualifying_payment_purpose, updated_at')
+    .select('program_type, activation_fee_zar, referral_earning_zar, monthly_fee_zar, qualifying_payment_purpose, updated_at')
     .eq('program_type', program)
     .single();
   if (error) throw error;
@@ -325,6 +332,7 @@ async function getReferralProgramSetting(programType) {
     ...data,
     activation_fee_zar: Number(data.activation_fee_zar || 0),
     referral_earning_zar: Number(data.referral_earning_zar || 0),
+    monthly_fee_zar: Number(data.monthly_fee_zar || 0),
   };
 }
 
@@ -339,7 +347,7 @@ async function ensureReferralProgram(memberKey, programType, options = {}) {
   if (!program || !member) throw new Error('Invalid referral program request.');
   const desiredStatus = options.status === 'pending' ? 'pending' : 'active';
   const { data: existing, error: existingError } = await supabase.from('referral_programs')
-    .select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, created_at, updated_at')
+    .select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, subscription_code, subscription_email_token, subscription_customer_code, subscription_authorization_code, subscription_status, subscription_started_at, subscription_next_billing_date, subscription_grace_ends_at, subscription_cancelled_at, created_at, updated_at')
     .eq('member_key', member)
     .eq('program_type', program)
     .maybeSingle();
@@ -395,13 +403,15 @@ async function claimReferralAttribution(memberKey, rawCode) {
   const createdAt = target.created_at ? new Date(target.created_at).getTime() : 0;
   if (createdAt && Date.now() - createdAt > 48 * 60 * 60 * 1000) return target;
 
-  const { data: program, error } = await supabase.from('referral_programs')
-    .select('member_key, program_type, referral_code, status')
+  const { data: rawProgram, error } = await supabase.from('referral_programs')
+    .select('id, member_key, program_type, referral_code, status, subscription_status, subscription_grace_ends_at')
     .eq('referral_code', code)
     .eq('status', 'active')
     .maybeSingle();
   if (error) throw error;
-  if (!program || program.member_key === member) return target;
+  if (!rawProgram) return target;
+  const program = await normalizeRentItProgramStatus(rawProgram);
+  if (!program || program.status !== 'active' || program.member_key === member) return target;
 
   const now = new Date().toISOString();
   const { data: updated, error: updateError } = await supabase.from('member_profiles').update({
@@ -436,20 +446,22 @@ async function recordReferralConversionForPayment(transaction, paymentTransactio
 
   const programType = cleanReferralProgram(referred.referral_program_used);
   if (!programType) return null;
-  const [{ data: referrerProgram, error: programError }, setting] = await Promise.all([
+  const [{ data: rawReferrerProgram, error: programError }, setting] = await Promise.all([
     supabase.from('referral_programs')
-      .select('id, member_key, program_type, referral_code, status')
+      .select('id, member_key, program_type, referral_code, status, subscription_status, subscription_grace_ends_at')
       .eq('member_key', referred.referred_by_member_key)
       .eq('program_type', programType)
       .maybeSingle(),
     getReferralProgramSetting(programType),
   ]);
   if (programError) throw programError;
+  const referrerProgram = rawReferrerProgram ? await normalizeRentItProgramStatus(rawReferrerProgram) : null;
   if (!referrerProgram || referrerProgram.status !== 'active') return null;
 
   const qualifies = transaction.purpose === setting.qualifying_payment_purpose;
   const earning = qualifies ? Number(setting.referral_earning_zar || 0) : 0;
-  const status = qualifies && earning > 0 ? 'owed' : 'tracked';
+  const splitPaid = Boolean(qualifies && earning > 0 && transaction?.metadata?.paystack_split_subaccount);
+  const status = splitPaid ? 'paid' : (qualifies && earning > 0 ? 'owed' : 'tracked');
   const now = new Date().toISOString();
   const { data, error } = await supabase.from('referral_conversions').upsert({
     referrer_member_key: referred.referred_by_member_key,
@@ -461,11 +473,15 @@ async function recordReferralConversionForPayment(transaction, paymentTransactio
     earning_amount_zar: earning,
     status,
     qualified_at: qualifies ? now : null,
+    paid_at: splitPaid ? now : null,
+    payout_reference: splitPaid ? `Paystack split · ${String(transaction?.metadata?.paystack_split_subaccount || '').slice(0, 40)}` : null,
     metadata: {
       referred_email: referred.email || null,
       referred_name: referred.display_name || null,
       referral_code: referred.referral_code_used || referrerProgram.referral_code,
       payment_purpose: transaction.purpose,
+      paystack_split: splitPaid,
+      paystack_split_subaccount: transaction?.metadata?.paystack_split_subaccount || null,
     },
     updated_at: now,
   }, { onConflict: 'referred_member_key,conversion_type', ignoreDuplicates: true })
@@ -554,11 +570,12 @@ async function referralDashboardForMember(memberKey, programType, autoActivateRe
   const setting = await getReferralProgramSetting(program);
 
   let { data: programRow, error: programError } = await supabase.from('referral_programs')
-    .select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, created_at, updated_at')
+    .select('id, member_key, program_type, referral_code, status, activation_payment_id, activated_at, subscription_code, subscription_email_token, subscription_customer_code, subscription_authorization_code, subscription_status, subscription_started_at, subscription_next_billing_date, subscription_grace_ends_at, subscription_cancelled_at, created_at, updated_at')
     .eq('member_key', member)
     .eq('program_type', program)
     .maybeSingle();
   if (programError) throw programError;
+  if (programRow && program === 'huurdit') programRow = await normalizeRentItProgramStatus(programRow);
   if (!programRow && program === 'reseller' && autoActivateReseller) {
     programRow = await ensureReferralProgram(member, 'reseller', { status: 'active' });
   }
@@ -639,6 +656,159 @@ function paystackSubscriptionCode(data) {
 
 function paystackReference(data) {
   return String(data?.reference || data?.transaction?.reference || '').trim().slice(0, 100);
+}
+
+
+async function paystackRentItBySubscription(subscriptionCode) {
+  const code = String(subscriptionCode || '').trim();
+  if (!code) return null;
+  const { data, error } = await supabase.from('referral_programs')
+    .select('id, member_key, program_type, status, referral_code, subscription_code, subscription_email_token, subscription_customer_code, subscription_authorization_code, subscription_status, subscription_started_at, subscription_next_billing_date, subscription_grace_ends_at, subscription_cancelled_at')
+    .eq('program_type', 'huurdit')
+    .eq('subscription_code', code)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function normalizeRentItProgramStatus(programRow) {
+  if (!programRow || programRow.program_type !== 'huurdit') return programRow;
+  const graceEnd = programRow.subscription_grace_ends_at ? new Date(programRow.subscription_grace_ends_at).getTime() : 0;
+  if (programRow.status === 'active' && String(programRow.subscription_status || '').toLowerCase() === 'past_due' && graceEnd && graceEnd <= Date.now()) {
+    const now = new Date().toISOString();
+    const { data, error } = await supabase.from('referral_programs').update({
+      status: 'suspended',
+      updated_at: now,
+    }).eq('id', programRow.id).select('*').single();
+    if (error) throw error;
+    return data;
+  }
+  return programRow;
+}
+
+async function recordFuelItForMembershipPayment(transaction, paymentTransactionId, paymentProviderId = '') {
+  if (!transaction || transaction.purpose !== 'membership_recurring' || !paymentTransactionId) return;
+  const settings = await getPaymentSettings();
+  const fuelAmount = Math.max(0, Number(settings.fuelit_allocation_zar || 33));
+  if (!fuelAmount) return;
+
+  const { data: source, error: sourceError } = await supabase.from('member_profiles')
+    .select('member_key, referred_by_member_key')
+    .eq('member_key', transaction.member_key)
+    .maybeSingle();
+  if (sourceError) throw sourceError;
+
+  const eventBase = String(paymentProviderId || paymentTransactionId).slice(0, 120);
+  await supabase.from('backmi_ledger_entries').insert([
+    {
+      event_key: `${eventBase}:fuelit-operating-debit`,
+      entry_type: 'fuelit_credit_allocation',
+      account: 'we_rise_operating',
+      direction: 'debit',
+      amount_zar: fuelAmount,
+      payment_transaction_id: paymentTransactionId,
+      member_key: transaction.member_key,
+      description: 'VulDit / Fuel-It allocation removed from recurring We-Rise operating revenue',
+    },
+    {
+      event_key: `${eventBase}:fuelit-pool-credit`,
+      entry_type: 'fuelit_credit_allocation',
+      account: 'fuelit_credit_pool',
+      direction: 'credit',
+      amount_zar: fuelAmount,
+      payment_transaction_id: paymentTransactionId,
+      member_key: source?.referred_by_member_key || transaction.member_key,
+      description: 'VulDit / Fuel-It allocation from verified recurring membership',
+    },
+  ]).then(({ error }) => {
+    if (error && error.code !== '23505') throw error;
+  });
+
+  if (source?.referred_by_member_key && source.referred_by_member_key !== source.member_key) {
+    const { error } = await supabase.from('fuelit_credit_entries').insert({
+      member_key: source.referred_by_member_key,
+      source_member_key: source.member_key,
+      payment_transaction_id: paymentTransactionId,
+      direction: 'credit',
+      amount_zar: fuelAmount,
+      entry_type: 'referral_credit',
+      description: 'R33 VulDit / Fuel-It credit from a verified active referred member payment',
+    });
+    if (error && error.code !== '23505') throw error;
+  }
+
+  // Apply available Fuel-It credit against the paying member's own R166 platform fee in the internal ledger.
+  const { data: entries, error: entryError } = await supabase.from('fuelit_credit_entries')
+    .select('direction, amount_zar')
+    .eq('member_key', transaction.member_key);
+  if (entryError) throw entryError;
+  const balance = (entries || []).reduce((sum, row) => sum + (row.direction === 'credit' ? Number(row.amount_zar || 0) : -Number(row.amount_zar || 0)), 0);
+  const applyAmount = Math.min(Math.max(0, balance), Number(settings.monthly_fee_zar || 166));
+  if (applyAmount > 0) {
+    const { error } = await supabase.from('fuelit_credit_entries').insert({
+      member_key: transaction.member_key,
+      source_member_key: transaction.member_key,
+      payment_transaction_id: paymentTransactionId,
+      direction: 'debit',
+      amount_zar: applyAmount,
+      entry_type: 'platform_fee_credit',
+      description: 'VulDit / Fuel-It credit applied against the member monthly platform fee',
+    });
+    if (error && error.code !== '23505') throw error;
+  }
+}
+
+async function finalizeRentItRecurringCharge(event, verified, rentProgram, subscriptionCode, billingDate = null) {
+  const setting = await getReferralProgramSetting('huurdit');
+  const reference = String(verified?.reference || '').trim();
+  const paymentId = paystackTransactionId(verified);
+  const amountGross = fromSubunit(verified?.amount);
+  const amountFee = fromSubunit(verified?.fees || 0);
+  const amountNet = Math.max(0, amountGross - amountFee);
+  const expected = Number(setting.monthly_fee_zar || 800);
+  if (!reference || !paymentId || String(verified?.status || '').toLowerCase() !== 'success') throw new Error('RentIt recurring Paystack transaction is not successful.');
+  if (String(verified?.currency || '').toUpperCase() !== PAYSTACK_CURRENCY) throw new Error('RentIt recurring currency mismatch.');
+  if (Math.abs(expected - amountGross) > 0.01) throw new Error('RentIt recurring amount mismatch.');
+
+  const { data: existing, error: existingError } = await supabase.from('payment_transactions')
+    .select('id, status')
+    .eq('pf_payment_id', paymentId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  let transactionId = existing?.id || null;
+  if (!existing) {
+    const { data, error } = await supabase.from('payment_transactions').insert({
+      member_key: rentProgram.member_key,
+      purpose: 'huurdit_recurring',
+      provider_merchant_reference: reference,
+      pf_payment_id: paymentId,
+      subscription_token: subscriptionCode,
+      expected_amount_zar: expected,
+      amount_gross_zar: amountGross,
+      amount_fee_zar: amountFee,
+      amount_net_zar: amountNet,
+      item_name: 'We-Rise RentIt / HuurDit Monthly Infrastructure',
+      status: 'complete',
+      metadata: { program_type: 'huurdit', monthly_fee_zar: expected },
+      payfast_payload: cleanPaystackPayload({ event, verified }),
+      verified_at: new Date().toISOString(),
+    }).select('id').single();
+    if (error) throw error;
+    transactionId = data.id;
+  }
+
+  const nextBilling = paystackBillingDate(event?.data?.subscription?.next_payment_date, billingDate ? dateAfterDays(30) : null);
+  const now = new Date().toISOString();
+  const { error: updateError } = await supabase.from('referral_programs').update({
+    status: 'active',
+    subscription_status: 'active',
+    subscription_next_billing_date: nextBilling || rentProgram.subscription_next_billing_date || null,
+    subscription_grace_ends_at: null,
+    updated_at: now,
+  }).eq('id', rentProgram.id);
+  if (updateError) throw updateError;
+
+  return { transactionId, reference, paymentId, amountGross };
 }
 
 function communityPolicyError(value) {
@@ -1936,6 +2106,7 @@ app.post('/api/paystack/webhook', async (c) => {
 
       let subscriptionCode = null;
       let billingDate = null;
+      let rentItSubscription = null;
       if (transaction.purpose === 'membership_joining' || transaction.purpose === 'membership_recurring') {
         const { data: member, error: memberError } = await supabase.from('member_profiles')
           .select(PROFILE_COLUMNS)
@@ -1993,10 +2164,86 @@ app.post('/api/paystack/webhook', async (c) => {
         }
       }
 
+
+      if (transaction.purpose === 'huurdit_activation') {
+        const { data: rentProgram, error: rentProgramError } = await supabase.from('referral_programs')
+          .select('id, member_key, subscription_code, subscription_email_token, subscription_customer_code, subscription_authorization_code, subscription_status, subscription_next_billing_date')
+          .eq('member_key', transaction.member_key)
+          .eq('program_type', 'huurdit')
+          .maybeSingle();
+        if (rentProgramError) throw rentProgramError;
+        if (!rentProgram?.subscription_code) {
+          const authorizationCode = String(verified?.authorization?.authorization_code || '').trim();
+          const customerCode = String(verified?.customer?.customer_code || '').trim();
+          if (!authorizationCode || verified?.authorization?.reusable !== true) throw new Error('The Paystack card authorization is not reusable for the R800 monthly RentIt infrastructure fee.');
+          if (!customerCode && !verified?.customer?.email) throw new Error('Paystack did not return a customer code for RentIt recurring billing.');
+          const firstBillingDate = dateAfterDays(30);
+          const created = await createPaystackSubscription(PAYSTACK_SECRET_KEY, {
+            customer: customerCode || verified.customer.email,
+            plan: PAYSTACK_RENTIT_PLAN_CODE,
+            authorization: authorizationCode,
+            start_date: subscriptionStartIso(firstBillingDate),
+          });
+          rentItSubscription = {
+            code: String(created?.subscription_code || '').trim(),
+            emailToken: String(created?.email_token || '').trim(),
+            customerCode,
+            authorizationCode,
+            status: String(created?.status || 'active').toLowerCase(),
+            nextBillingDate: paystackBillingDate(created?.next_payment_date, firstBillingDate),
+          };
+          if (!rentItSubscription.code || !rentItSubscription.emailToken) throw new Error('Paystack created RentIt recurring billing without subscription management details.');
+          const preSaveNow = new Date().toISOString();
+          const { error: preSaveRentError } = await supabase.from('referral_programs').update({
+            subscription_code: rentItSubscription.code,
+            subscription_email_token: rentItSubscription.emailToken,
+            subscription_customer_code: rentItSubscription.customerCode || null,
+            subscription_authorization_code: rentItSubscription.authorizationCode,
+            subscription_status: rentItSubscription.status,
+            subscription_started_at: preSaveNow,
+            subscription_next_billing_date: rentItSubscription.nextBillingDate,
+            subscription_grace_ends_at: null,
+            subscription_cancelled_at: null,
+            updated_at: preSaveNow,
+          }).eq('id', rentProgram.id);
+          if (preSaveRentError) throw preSaveRentError;
+        } else {
+          rentItSubscription = {
+            code: String(rentProgram.subscription_code || '').trim(),
+            emailToken: String(rentProgram.subscription_email_token || '').trim(),
+            customerCode: String(rentProgram.subscription_customer_code || '').trim(),
+            authorizationCode: String(rentProgram.subscription_authorization_code || '').trim(),
+            status: String(rentProgram.subscription_status || 'active').toLowerCase(),
+            nextBillingDate: rentProgram.subscription_next_billing_date || null,
+          };
+        }
+      }
+
       const result = await finalizeVerifiedPaystackCharge(event, verified, transaction, subscriptionCode, billingDate);
       if (!result.ignored) {
         await recordReferralConversionForPayment(result.transaction, result.transaction?.id);
-        await recordPaystackAudit({ event, transaction: result.transaction, transactionId: result.transactionId, reference: result.reference, subscriptionCode });
+        if (result.transaction?.purpose === 'membership_recurring') {
+          await recordFuelItForMembershipPayment(result.transaction, result.transaction?.id, result.transactionId);
+        }
+        if (result.transaction?.purpose === 'huurdit_activation' && rentItSubscription) {
+          const program = await ensureReferralProgram(result.transaction.member_key, 'huurdit', { status: 'active', activationPaymentId: result.transaction?.id });
+          const now = new Date().toISOString();
+          const { error: rentSaveError } = await supabase.from('referral_programs').update({
+            status: 'active',
+            subscription_code: rentItSubscription.code,
+            subscription_email_token: rentItSubscription.emailToken,
+            subscription_customer_code: rentItSubscription.customerCode || null,
+            subscription_authorization_code: rentItSubscription.authorizationCode,
+            subscription_status: rentItSubscription.status,
+            subscription_started_at: now,
+            subscription_next_billing_date: rentItSubscription.nextBillingDate,
+            subscription_grace_ends_at: null,
+            subscription_cancelled_at: null,
+            updated_at: now,
+          }).eq('id', program.id);
+          if (rentSaveError) throw rentSaveError;
+        }
+        await recordPaystackAudit({ event, transaction: result.transaction, transactionId: result.transactionId, reference: result.reference, subscriptionCode: rentItSubscription?.code || subscriptionCode });
       }
       return c.text('OK', 200);
     }
@@ -2007,8 +2254,23 @@ app.post('/api/paystack/webhook', async (c) => {
       if (!reference || !subscriptionCode) return c.text('OK', 200);
       const verified = await verifyPaystackTransaction(PAYSTACK_SECRET_KEY, reference);
       const billingDate = paystackBillingDate(eventData?.period_start || eventData?.paid_at || verified?.paid_at, null);
+      const rentProgram = await paystackRentItBySubscription(subscriptionCode);
+      if (rentProgram) {
+        const rentResult = await finalizeRentItRecurringCharge(event, verified, rentProgram, subscriptionCode, billingDate);
+        await recordPaystackAudit({
+          event,
+          transaction: { id: rentResult.transactionId, purpose: 'huurdit_recurring', member_key: rentProgram.member_key },
+          transactionId: rentResult.paymentId,
+          reference: rentResult.reference,
+          subscriptionCode,
+        });
+        return c.text('OK', 200);
+      }
       const result = await finalizeVerifiedPaystackCharge(event, verified, null, subscriptionCode, billingDate);
       if (!result.ignored) {
+        if (result.transaction?.purpose === 'membership_recurring') {
+          await recordFuelItForMembershipPayment(result.transaction, result.transaction?.id, result.transactionId);
+        }
         const member = await paystackMemberBySubscription(subscriptionCode);
         if (member) {
           const now = new Date().toISOString();
@@ -2031,6 +2293,19 @@ app.post('/api/paystack/webhook', async (c) => {
 
     if (eventType === 'invoice.payment_failed') {
       const subscriptionCode = paystackSubscriptionCode(eventData);
+      const rentProgram = await paystackRentItBySubscription(subscriptionCode);
+      if (rentProgram) {
+        const settings = await getPaymentSettings();
+        const graceDays = Number(settings.subscription_grace_days || 5);
+        const graceEnd = new Date(Date.now() + graceDays * 86400000).toISOString();
+        const { error: rentFailError } = await supabase.from('referral_programs').update({
+          subscription_status: 'past_due',
+          subscription_grace_ends_at: graceEnd,
+          updated_at: new Date().toISOString(),
+        }).eq('id', rentProgram.id);
+        if (rentFailError) throw rentFailError;
+        return c.text('OK', 200);
+      }
       const member = await paystackMemberBySubscription(subscriptionCode);
       if (!member) return c.text('OK', 200);
       const settings = await getPaymentSettings();
@@ -2079,6 +2354,19 @@ app.post('/api/paystack/webhook', async (c) => {
 
     if (eventType === 'subscription.not_renew' || eventType === 'subscription.disable') {
       const subscriptionCode = paystackSubscriptionCode(eventData);
+      const rentProgram = await paystackRentItBySubscription(subscriptionCode);
+      if (rentProgram) {
+        const now = new Date().toISOString();
+        const { error: rentCancelError } = await supabase.from('referral_programs').update({
+          status: 'inactive',
+          subscription_status: 'cancelled',
+          subscription_cancelled_at: now,
+          subscription_grace_ends_at: null,
+          updated_at: now,
+        }).eq('id', rentProgram.id);
+        if (rentCancelError) throw rentCancelError;
+        return c.text('OK', 200);
+      }
       const member = await paystackMemberBySubscription(subscriptionCode);
       if (!member) return c.text('OK', 200);
       const settings = await getPaymentSettings();
@@ -2154,6 +2442,7 @@ app.put('/api/admin/payment-settings', async (c) => {
       monthly_fee_zar: number('monthly_fee_zar', 1, 10000000),
       backmi_allocation_usd: number('backmi_allocation_usd', 0, 1000000),
       backmi_allocation_zar: number('backmi_allocation_zar', 0, 10000000),
+      fuelit_allocation_zar: number('fuelit_allocation_zar', 0, 10000000),
       backmi_allocation_mode: ['fixed', 'percentage'].includes(body.backmi_allocation_mode) ? body.backmi_allocation_mode : current.backmi_allocation_mode,
       backmi_allocation_percentage: number('backmi_allocation_percentage', 0, 100),
       allocation_fee_basis: ['gross', 'net'].includes(body.allocation_fee_basis) ? body.allocation_fee_basis : current.allocation_fee_basis,
@@ -3130,13 +3419,15 @@ app.get('/api/referrals/resolve/:code', async (c) => {
   try {
     const code = cleanReferralCode(c.req.param('code'));
     if (!code) return c.json({ valid: false }, 404);
-    const { data: program, error } = await supabase.from('referral_programs')
-      .select('member_key, program_type, referral_code, status')
+    const { data: rawProgram, error } = await supabase.from('referral_programs')
+      .select('id, member_key, program_type, referral_code, status, subscription_status, subscription_grace_ends_at')
       .eq('referral_code', code)
       .eq('status', 'active')
       .maybeSingle();
     if (error) throw error;
-    if (!program) return c.json({ valid: false }, 404);
+    if (!rawProgram) return c.json({ valid: false }, 404);
+    const program = await normalizeRentItProgramStatus(rawProgram);
+    if (!program || program.status !== 'active') return c.json({ valid: false }, 404);
     const { data: member, error: memberError } = await supabase.from('member_profiles')
       .select('display_name')
       .eq('member_key', program.member_key)
@@ -3158,13 +3449,15 @@ app.post('/api/referrals/visit', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const code = cleanReferralCode(body?.code);
     if (!code) return c.json({ success: false, valid: false }, 400);
-    const { data: program, error } = await supabase.from('referral_programs')
-      .select('id, referral_code')
+    const { data: rawProgram, error } = await supabase.from('referral_programs')
+      .select('id, member_key, program_type, referral_code, status, subscription_status, subscription_grace_ends_at')
       .eq('referral_code', code)
       .eq('status', 'active')
       .maybeSingle();
     if (error) throw error;
-    if (!program) return c.json({ success: false, valid: false }, 404);
+    if (!rawProgram) return c.json({ success: false, valid: false }, 404);
+    const program = await normalizeRentItProgramStatus(rawProgram);
+    if (!program || program.status !== 'active') return c.json({ success: false, valid: false }, 404);
     const { error: insertError } = await supabase.from('referral_link_clicks').insert({
       referral_program_id: program.id,
       referral_code: program.referral_code,
@@ -3208,7 +3501,7 @@ app.post('/api/referrals/programs/huurdit/checkout', async (c) => {
     if (body?.accepted_terms !== true) {
       return c.json({ error: 'Confirm the RentIt / HuurDit terms before continuing to Paystack.', code: 'HUURDIT_TERMS_REQUIRED' }, 400);
     }
-    if (!PAYSTACK_CONFIGURED) return c.json({ error: 'Paystack is not configured on the We-Rise server yet.' }, 503);
+    if (!PAYSTACK_RENTIT_CONFIGURED) return c.json({ error: 'Paystack RentIt recurring billing is not configured on the We-Rise server yet.', code: 'RENTIT_PLAN_NOT_CONFIGURED' }, 503);
 
     const existingDashboard = await referralDashboardForMember(auth.memberKey, 'huurdit');
     if (existingDashboard.program?.status === 'active') {
@@ -3217,7 +3510,31 @@ app.post('/api/referrals/programs/huurdit/checkout', async (c) => {
 
     const setting = existingDashboard.settings;
     const amount = Number(setting.activation_fee_zar || 0);
+    const monthlyFee = Number(setting.monthly_fee_zar || 800);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error('The HuurDit activation price is not configured.');
+    if (!Number.isFinite(monthlyFee) || monthlyFee <= 0) throw new Error('The HuurDit monthly infrastructure price is not configured.');
+
+    const rentPlan = await fetchPaystackPlan(PAYSTACK_SECRET_KEY, PAYSTACK_RENTIT_PLAN_CODE);
+    if (String(rentPlan?.plan_code || '') !== PAYSTACK_RENTIT_PLAN_CODE
+      || String(rentPlan?.currency || '').toUpperCase() !== PAYSTACK_CURRENCY
+      || String(rentPlan?.interval || '').toLowerCase() !== 'monthly'
+      || Number(rentPlan?.amount) !== Number(toSubunit(monthlyFee))) {
+      return c.json({ error: `The Paystack RentIt plan must be a monthly R${monthlyFee.toFixed(2)} ZAR plan before activation can continue.`, code: 'RENTIT_PLAN_MISMATCH' }, 503);
+    }
+
+    let splitSubaccount = '';
+    if (auth.profile?.referred_by_member_key && auth.profile?.referral_program_used === 'huurdit') {
+      const [{ data: referrerProfile, error: referrerError }, { data: referrerProgram, error: referrerProgramError }] = await Promise.all([
+        supabase.from('member_profiles').select('member_key, paystack_subaccount_code').eq('member_key', auth.profile.referred_by_member_key).maybeSingle(),
+        supabase.from('referral_programs').select('member_key, status').eq('member_key', auth.profile.referred_by_member_key).eq('program_type', 'huurdit').maybeSingle(),
+      ]);
+      if (referrerError) throw referrerError;
+      if (referrerProgramError) throw referrerProgramError;
+      const candidate = String(referrerProfile?.paystack_subaccount_code || '').trim();
+      if (referrerProgram?.status === 'active' && /^ACCT_[A-Za-z0-9]+$/.test(candidate)) splitSubaccount = candidate;
+    }
+
+    await ensureReferralProgram(auth.memberKey, 'huurdit', { status: 'pending' });
 
     const recentCutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const { data: recent, error: recentError } = await supabase.from('payment_transactions')
@@ -3244,13 +3561,17 @@ app.post('/api/referrals/programs/huurdit/checkout', async (c) => {
           program_type: 'huurdit',
           activation_fee_zar: amount,
           referral_earning_zar: Number(setting.referral_earning_zar || 0),
+          monthly_fee_zar: monthlyFee,
+          paystack_rentit_plan_code: PAYSTACK_RENTIT_PLAN_CODE,
+          paystack_split_subaccount: splitSubaccount || null,
+          paystack_split_main_account_zar: splitSubaccount ? Math.max(0, amount - Number(setting.referral_earning_zar || 0)) : null,
           terms_accepted_at: new Date().toISOString(),
         },
       });
       if (error) throw error;
     }
 
-    const checkout = await initializePaystackTransaction(PAYSTACK_SECRET_KEY, {
+    const checkoutPayload = {
       email: auth.user.email || auth.profile.email || '',
       amount: toSubunit(amount),
       currency: PAYSTACK_CURRENCY,
@@ -3262,8 +3583,15 @@ app.post('/api/referrals/programs/huurdit/checkout', async (c) => {
         purpose: 'huurdit_activation',
         member_key: auth.memberKey,
         item_name: 'We-Rise RentIt / HuurDit Activation',
+        recurring_monthly_zar: monthlyFee,
       }),
-    });
+    };
+    if (splitSubaccount) {
+      checkoutPayload.subaccount = splitSubaccount;
+      checkoutPayload.transaction_charge = toSubunit(Math.max(0, amount - Number(setting.referral_earning_zar || 0)));
+      checkoutPayload.bearer = 'account';
+    }
+    const checkout = await initializePaystackTransaction(PAYSTACK_SECRET_KEY, checkoutPayload);
 
     return c.json({
       authorization_url: checkout?.authorization_url,
@@ -3271,6 +3599,46 @@ app.post('/api/referrals/programs/huurdit/checkout', async (c) => {
       reference: checkout?.reference || reference,
       amount_zar: amount,
       mode: PAYSTACK_SECRET_KEY.startsWith('sk_live_') ? 'live' : 'test',
+    });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
+
+app.get('/api/fuelit/status', async (c) => {
+  try {
+    const auth = await memberAccessContext(c);
+    if (auth.response) return auth.response;
+    const settings = await getPaymentSettings();
+    const fuelAmount = Number(settings.fuelit_allocation_zar || 33);
+    const monthlyFee = Number(settings.monthly_fee_zar || 166);
+
+    const { count, error: countError } = await supabase.from('member_profiles')
+      .select('member_key', { count: 'exact', head: true })
+      .eq('referred_by_member_key', auth.memberKey)
+      .eq('membership_status', 'active')
+      .not('joining_paid_at', 'is', null);
+    if (countError) throw countError;
+    const qualifying = Number(count || 0);
+    const grossCredit = qualifying * fuelAmount;
+
+    const { data: entries, error: entryError } = await supabase.from('fuelit_credit_entries')
+      .select('direction, amount_zar')
+      .eq('member_key', auth.memberKey);
+    if (entryError && entryError.code !== '42P01') throw entryError;
+    const ledgerBalance = (entries || []).reduce((sum, row) => sum + (row.direction === 'credit' ? Number(row.amount_zar || 0) : -Number(row.amount_zar || 0)), 0);
+
+    return c.json({
+      qualifying_active_referrals: qualifying,
+      credit_per_referral_zar: fuelAmount,
+      gross_monthly_credit_zar: grossCredit,
+      platform_fee_zar: monthlyFee,
+      platform_fee_credit_zar: Math.min(monthlyFee, grossCredit),
+      effective_platform_fee_zar: Math.max(0, monthlyFee - grossCredit),
+      excess_credit_zar: Math.max(0, grossCredit - monthlyFee),
+      ledger_available_credit_zar: Math.max(0, ledgerBalance),
+      break_even_referrals: fuelAmount > 0 ? Math.ceil(monthlyFee / fuelAmount) : 0,
     });
   } catch (error) {
     return fail(c, error);
@@ -3621,6 +3989,28 @@ app.get('/api/admin/members', async (c) => {
   }
 });
 
+app.put('/api/admin/members/:memberKey/paystack-subaccount', async (c) => {
+  try {
+    const auth = await adminContext(c);
+    if (auth.response) return auth.response;
+    const memberKey = cleanMemberKey(c.req.param('memberKey'));
+    if (!memberKey) return c.json({ error: 'Invalid member id.' }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    const code = String(body?.subaccount_code || '').trim().toUpperCase();
+    if (code && !/^ACCT_[A-Z0-9]+$/.test(code)) return c.json({ error: 'Enter a valid Paystack subaccount code beginning with ACCT_.' }, 400);
+    const { data, error } = await supabase.from('member_profiles').update({
+      paystack_subaccount_code: code || null,
+      updated_at: new Date().toISOString(),
+    }).eq('member_key', memberKey).select('member_key, display_name, email, paystack_subaccount_code').maybeSingle();
+    if (error) throw error;
+    if (!data) return c.json({ error: 'Member not found.' }, 404);
+    await recordAdminAudit(auth, 'paystack_subaccount_updated', 'member', memberKey, { subaccount_code: code || null });
+    return c.json({ success: true, member: data });
+  } catch (error) {
+    return fail(c, error);
+  }
+});
+
 app.delete('/api/admin/members/:memberKey', async (c) => {
   try {
     const auth = await adminContext(c);
@@ -3750,6 +4140,7 @@ app.get('/api/admin/members/:memberKey', async (c) => {
         avatar_url: avatarUrl,
         profile_photo_completed_at: profile.profile_photo_completed_at || null,
         paystack_customer_code: profile.paystack_customer_code || null,
+        paystack_subaccount_code: profile.paystack_subaccount_code || null,
         subscription_code: profile.payfast_subscription_token || null,
         subscription_status: profile.payfast_subscription_status || null,
         referred_by_member_key: profile.referred_by_member_key || null,
@@ -3793,7 +4184,7 @@ app.get('/api/admin/payments', async (c) => {
     const from = (page - 1) * pageSize;
     let query = supabase.from('payment_transactions').select('id, member_key, purpose, request_id, checkout_reference, provider_merchant_reference, pf_payment_id, currency, expected_amount_zar, amount_gross_zar, amount_fee_zar, amount_net_zar, item_name, status, created_at, updated_at, verified_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
     if (['pending', 'complete', 'failed', 'cancelled', 'refunded', 'reversed'].includes(status)) query = query.eq('status', status);
-    if (['membership_joining', 'membership_recurring', 'backmi_gift', 'huurdit_activation'].includes(purpose)) query = query.eq('purpose', purpose);
+    if (['membership_joining', 'membership_recurring', 'backmi_gift', 'huurdit_activation', 'huurdit_recurring'].includes(purpose)) query = query.eq('purpose', purpose);
     const { data, error, count } = await query;
     if (error) throw error;
     const memberKeys = [...new Set((data || []).map(row => row.member_key).filter(Boolean))];

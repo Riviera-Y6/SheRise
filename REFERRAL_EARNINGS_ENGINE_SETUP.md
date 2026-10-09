@@ -57,8 +57,8 @@ A referral earning is created only after the qualifying Paystack transaction has
 - If not active, she can pay the **R1800.00 once-off activation** through Paystack.
 - Her own first R1800 activation belongs **100% to We-Rise** and creates no earning for herself.
 - After Paystack confirms the activation, she receives a permanent unique HuurDit referral link.
-- When a new person registers through her link and later pays her own qualifying **R1800.00 HuurDit activation**, the referrer receives an **R1000.00 owed earning** in the We-Rise ledger.
-- The remaining R800.00 is not automatically split by the software. It remains subject to the applicable We-Rise agreement.
+- When a new person registers through her link and later completes her own qualifying **R1800.00 Premium HuurDit licence sale**, the sale creates a **R1000.00 direct sales commission** for the referrer and **R800.00 for We-Rise**. This is a product/licence-sale commission, not a recruitment reward.
+- When the referrer has a valid Paystack **ACCT_...** subaccount configured in Admin, checkout uses Paystack split settlement so the R1000/R800 allocation happens on that verified sale. If no subaccount is configured yet, the conversion is retained as **owed** for manual settlement rather than being lost.
 
 ## 5. Reseller logic
 

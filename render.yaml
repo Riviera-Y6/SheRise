@@ -26,6 +26,8 @@ services:
         sync: false
       - key: PAYSTACK_PLAN_CODE
         sync: false
+      - key: PAYSTACK_RENTIT_PLAN_CODE
+        sync: false
       - key: PAYSTACK_CURRENCY
         value: ZAR
       - key: ENABLE_BACKMI_PAYMENTS

@@ -7,7 +7,6 @@ const supporters = [
   'AFG Designs',
   'Mi Liquors',
   'MBT Petroleum',
-  'Die Tipsy Tert',
   'Find At Home',
 ];
 
@@ -24,7 +23,7 @@ function SupporterTrack({ hidden = false }) {
   );
 }
 
-export default function Footer({ t }) {
+export default function Footer({ t, onOpenTerms }) {
   return (
     <footer className="app-footer">
       <div className="footer-supporter-label">{t.footerSupporters}</div>
@@ -34,6 +33,7 @@ export default function Footer({ t }) {
           <SupporterTrack hidden />
         </div>
       </div>
+      <button type="button" className="footer-terms-link" onClick={onOpenTerms}>{t.terms}</button>
       <div className="footer-rights">{t.footerRights}</div>
     </footer>
   );
