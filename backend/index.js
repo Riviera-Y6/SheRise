@@ -3888,13 +3888,55 @@ app.get('/api/admin/overview', async (c) => {
   try {
     const auth = await adminContext(c);
     if (auth.response) return auth.response;
-    const [{ data: metrics, error: metricError }, settingsResult] = await Promise.all([
+    const [{ data: metrics, error: metricError }, settingsResult, recentResult] = await Promise.all([
       supabase.rpc('get_we_rise_admin_metrics'),
       getPaymentSettings(),
+      supabase.from('member_profiles')
+        .select('member_key, display_name, email, role, membership_status, created_at, profile_photo_completed_at, auth_user_id')
+        .eq('role', 'member')
+        .not('auth_user_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(250),
     ]);
     if (metricError) throw metricError;
+    if (recentResult.error) throw recentResult.error;
+
+    const normalizeRegistrationName = (value) => String(value || '')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+    const sampledMembers = recentResult.data || [];
+    const nameGroups = new Map();
+    for (const row of sampledMembers) {
+      const key = normalizeRegistrationName(row.display_name);
+      if (!key) continue;
+      const group = nameGroups.get(key) || [];
+      group.push(row);
+      nameGroups.set(key, group);
+    }
+    const recentRegistrations = sampledMembers.slice(0, 10).map((row) => {
+      const key = normalizeRegistrationName(row.display_name);
+      const group = key ? (nameGroups.get(key) || []) : [];
+      const distinctEmails = [...new Set(group.map(item => String(item.email || '').trim().toLowerCase()).filter(Boolean))];
+      return {
+        member_key: row.member_key,
+        display_name: row.display_name || 'We-Rise member',
+        email: row.email || null,
+        membership_status: row.membership_status || 'unknown',
+        created_at: row.created_at,
+        profile_complete: Boolean(row.profile_photo_completed_at),
+        possible_duplicate: group.length > 1 && distinctEmails.length > 1,
+        matching_accounts: group.length,
+        matching_emails: distinctEmails,
+      };
+    });
+
     return c.json({
       metrics: metrics || {},
+      recent_registrations: recentRegistrations,
       payment_settings: publicPaymentSettings(settingsResult),
       system: {
         paystack_configured: PAYSTACK_CONFIGURED,

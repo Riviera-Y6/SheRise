@@ -176,10 +176,12 @@ function NotificationsBell({ lang = 'en', strings, onOpenMember }) {
   </div>;
 }
 
-function Overview({ data, refresh }) {
+function Overview({ data, refresh, lang = 'en' }) {
   const m = data?.metrics || {};
+  const [showRecent, setShowRecent] = useState(false);
+  const recent = Array.isArray(data?.recent_registrations) ? data.recent_registrations : [];
   const cards = [
-    ['Members', m.total_members, HiUsers],
+    ['Members', m.total_members, HiUsers, true],
     ['New today', m.new_today, HiUserAdd],
     ['Paid members', m.active_members, HiCheckCircle],
     ['Trial members', m.trial_members, HiClock],
@@ -188,9 +190,19 @@ function Overview({ data, refresh }) {
     ['Revenue this month', money(m.revenue_month_zar), HiCash],
     ['Failed payments', m.failed_payments_month, HiExclamationCircle],
   ];
+  const recentTitle = lang === 'af' ? 'Nuutste registrasies' : 'Latest registrations';
+  const recentSubtitle = lang === 'af' ? 'Die 10 mees onlangse We-Rise-rekeninge. Moontlike duplikate is slegs ’n waarskuwing vir administratiewe hersiening.' : 'The 10 most recent We-Rise accounts. Possible duplicates are only a warning for administrative review.';
   return <div className="admin-section-stack">
-    <div className="admin-section-heading"><div><h2>Overview</h2><p>Current We-Rise membership and payment health.</p></div><button className="admin-icon-button" onClick={refresh}><HiRefresh /></button></div>
-    <div className="admin-metric-grid">{cards.map(([label, value, Icon]) => <div className="admin-metric-card" key={label}><div className="admin-metric-icon"><Icon /></div><div><span>{label}</span><strong>{value ?? 0}</strong></div></div>)}</div>
+    <div className="admin-section-heading"><div><h2>{lang === 'af' ? 'Oorsig' : 'Overview'}</h2><p>{lang === 'af' ? 'Huidige We-Rise-lidmaatskap en betalingsgesondheid.' : 'Current We-Rise membership and payment health.'}</p></div><button className="admin-icon-button" onClick={refresh}><HiRefresh /></button></div>
+    <div className="admin-metric-grid">{cards.map(([label, value, Icon, clickable]) => clickable ? <button type="button" className={`admin-metric-card admin-metric-card-clickable ${showRecent ? 'active' : ''}`} key={label} onClick={() => setShowRecent(v => !v)} aria-expanded={showRecent}><div className="admin-metric-icon"><Icon /></div><div><span>{lang === 'af' ? 'Lede' : label}</span><strong>{value ?? 0}</strong><small>{lang === 'af' ? 'Tik om nuutste te sien' : 'Tap to see latest'}</small></div></button> : <div className="admin-metric-card" key={label}><div className="admin-metric-icon"><Icon /></div><div><span>{label}</span><strong>{value ?? 0}</strong></div></div>)}</div>
+    {showRecent && <div className="admin-panel admin-recent-registrations">
+      <div className="admin-recent-heading"><div><h3>{recentTitle}</h3><p>{recentSubtitle}</p></div><span>{recent.length}</span></div>
+      {!recent.length ? <Empty>{lang === 'af' ? 'Nog geen registrasies nie.' : 'No registrations yet.'}</Empty> : <div className="admin-recent-list">{recent.map((row, index) => <div className="admin-recent-member" key={row.member_key || `${row.email}-${index}`}>
+        <div className="admin-recent-number">{index + 1}</div>
+        <div className="admin-recent-copy"><strong>{row.display_name || 'We-Rise member'}</strong><span>{row.email || '—'}</span><small>{dateTime(row.created_at)}</small></div>
+        <div className="admin-recent-status"><StatusPill value={row.membership_status} />{row.possible_duplicate && <span className="admin-duplicate-warning"><HiExclamationCircle /> {lang === 'af' ? `Moontlike duplikaat · ${row.matching_accounts}` : `Possible duplicate · ${row.matching_accounts}`}</span>}</div>
+      </div>)}</div>}
+    </div>}
     <div className="admin-summary-grid">
       <div className="admin-panel"><h3>Membership</h3><div className="admin-kv"><span>Past due</span><strong>{m.past_due_members || 0}</strong></div><div className="admin-kv"><span>Cancelled</span><strong>{m.cancelled_members || 0}</strong></div><div className="admin-kv"><span>Payments today</span><strong>{m.payments_today || 0}</strong></div></div>
       <div className="admin-panel"><h3>Revenue</h3><div className="admin-kv"><span>Today</span><strong>{money(m.revenue_today_zar)}</strong></div><div className="admin-kv"><span>Joining fees this month</span><strong>{money(m.joining_revenue_month_zar)}</strong></div><div className="admin-kv"><span>Recurring this month</span><strong>{money(m.recurring_revenue_month_zar)}</strong></div></div>
@@ -482,7 +494,7 @@ export default function AdminDashboard({ lang = 'en', profile, onToggleLang, onL
     return base;
   }, [profile?.role, strings]);
 
-  const page = section === 'overview' ? (overviewError ? <Empty>{overviewError}</Empty> : !overview ? <Loading /> : <Overview data={overview} refresh={loadOverview} />)
+  const page = section === 'overview' ? (overviewError ? <Empty>{overviewError}</Empty> : !overview ? <Loading /> : <Overview data={overview} refresh={loadOverview} lang={lang} />)
     : section === 'members' ? <Members focusMemberKey={focusMemberKey} onFocusConsumed={() => setFocusMemberKey('')} lang={lang} strings={strings} /> : section === 'activity' ? <Activity /> : section === 'payments' ? <Payments />
     : section === 'waitlist' ? <WaitlistAdmin /> : section === 'community' ? <CommunityAdmin /> : section === 'backmi' ? <BackMiAdmin />
     : section === 'referrals' ? <ReferralsAdmin lang={lang} /> : section === 'free-access' && profile?.role === 'owner' ? <FreeAccessAdmin lang={lang} /> : section === 'audit' ? <Audit /> : <SystemAdmin data={overview} />;
